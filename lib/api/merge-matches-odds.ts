@@ -142,7 +142,7 @@ export function extractMatchOdds(event: OddsApiEvent): MatchOdds {
     if (market.key === ODDS_MARKETS.BTTS && market.outcomes?.length) {
       result.btts = bestOddsFromOutcomes(market.outcomes);
     }
-    if (TOTALS_KEYS.includes(market.key) && market.outcomes?.length) {
+    if (TOTALS_KEYS.includes(market.key as "totals") && market.outcomes?.length) {
       const point = market.outcomes[0]?.point;
       const key = point != null ? String(point) : "default";
       if (!result.totals) result.totals = {};
@@ -184,7 +184,7 @@ export function extractBestOddsAcrossBookmakers(event: OddsApiEvent): MatchOdds 
             if (odds > (result.btts.bestOdds[name] ?? 0))
               result.btts.bestOdds[name] = odds;
       }
-      if (TOTALS_KEYS.includes(market.key) && market.outcomes?.length) {
+      if (TOTALS_KEYS.includes(market.key as "totals") && market.outcomes?.length) {
         const point = market.outcomes[0]?.point;
         const key = point != null ? String(point) : "default";
         if (!result.totals) result.totals = {};
