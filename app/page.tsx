@@ -846,6 +846,8 @@ function ResultsTab({
 }
 
 function SwapLegModal({
+  betIndex,
+  legIndex,
   bet,
   recommendations,
   onSelectSingle,
