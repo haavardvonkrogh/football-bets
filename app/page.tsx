@@ -559,7 +559,7 @@ export default function DashboardPage() {
                                 <button type="button" onClick={() => setSwapModal({ betIndex: i, legIndex: legIdx })} className="rounded bg-[var(--card-border)] px-2 py-1 text-xs font-medium text-white hover:bg-white/20">
                                   Bytt kamp
                                 </button>
-                                {bet.legs.length > 2 && (
+                                {bet.legs && bet.legs.length > 2 && (
                                   <button type="button" onClick={() => handleRemoveAccaLeg(i, legIdx)} className="rounded bg-[var(--value-high-risk)]/30 px-2 py-1 text-xs font-medium text-[var(--value-high-risk)] hover:bg-[var(--value-high-risk)]/50">
                                     Fjern
                                   </button>
@@ -568,7 +568,7 @@ export default function DashboardPage() {
                             )}
                           </div>
                         ))}
-                        {planEditMode && bet.legs.length < 6 && (
+                        {planEditMode && bet.legs && bet.legs.length < 6 && (
                           <button type="button" onClick={() => setSwapModal({ betIndex: i })} className="mt-1 rounded border border-dashed border-[var(--card-border)] px-2 py-1 text-xs text-[var(--muted)] hover:bg-white/5 hover:text-white">
                             + Legg til leg
                           </button>
