@@ -203,7 +203,7 @@ export default function MatchPreviewPage() {
     return (
       <div className="min-h-screen bg-[var(--bg)] text-[var(--fg)] flex flex-col items-center justify-center gap-4 p-4">
         <p className="text-[var(--value-high-risk)]">{error}</p>
-        <Link href="/" className="text-[#14b8a6] hover:underline">Tilbake til oversikten</Link>
+        <Link href="/" className="text-[var(--accent)] hover:underline">Tilbake til oversikten</Link>
       </div>
     );
   }
@@ -230,9 +230,9 @@ export default function MatchPreviewPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
-      <header className="sticky top-0 z-10 border-b border-[var(--card-border)] bg-[var(--bg)]/95 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-[var(--card-border)] bg-[var(--bg)]/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3">
-          <Link href="/" className="text-sm font-medium text-[var(--muted)] hover:text-white transition">
+          <Link href="/" className="text-sm font-medium text-[var(--muted)] transition duration-200 hover:text-[var(--accent)]">
             ← Tilbake til oversikten
           </Link>
         </div>
@@ -241,7 +241,7 @@ export default function MatchPreviewPage() {
       <main className="mx-auto max-w-4xl px-4 py-8">
         {/* 1. Match header */}
         <section className="glass-card mb-6 overflow-hidden">
-          <div className="border-b border-[var(--card-border)] bg-gradient-to-r from-[#14b8a6]/10 to-[#8b5cf6]/10 p-6">
+          <div className="border-b border-[var(--card-border)] bg-gradient-to-r from-[var(--accent)]/10 to-[var(--accent-secondary)]/10 p-6">
             <p className="mb-1 text-sm font-medium text-[var(--muted)]">{match.competition.name}</p>
             <p className="text-sm text-[var(--muted)]">
               {formatDate(match.utcDate)}
@@ -265,23 +265,23 @@ export default function MatchPreviewPage() {
           </div>
           {/* Current odds */}
           <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-3">
-            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)]/80 p-4">
+            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 p-4 backdrop-blur-sm">
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">BTTS</h3>
               {odds?.btts ? (
-                <p className="text-lg font-bold text-white">
+                <p className="text-lg font-bold text-[var(--accent)]">
                   Ja @ {odds.btts.yes.toFixed(2)} / Nei @ {odds.btts.no.toFixed(2)}
                 </p>
               ) : (
                 <p className="text-[var(--muted)]">–</p>
               )}
             </div>
-            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)]/80 p-4">
+            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 p-4 backdrop-blur-sm">
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Over/Under</h3>
               {odds?.overUnder && odds.overUnder.length > 0 ? (
                 <div className="space-y-1 text-sm">
                   {odds.overUnder.slice(0, 3).map((row) => (
-                    <p key={row.line} className="font-medium text-white">
-                      {row.line}: O {row.over.toFixed(2)} / U {row.under.toFixed(2)}
+                    <p key={row.line} className="font-medium">
+                      <span className="text-[var(--muted)]">{row.line}:</span> O <span className="font-bold text-[var(--accent)]">{row.over.toFixed(2)}</span> / U <span className="font-bold text-[var(--accent)]">{row.under.toFixed(2)}</span>
                     </p>
                   ))}
                 </div>
@@ -289,13 +289,13 @@ export default function MatchPreviewPage() {
                 <p className="text-[var(--muted)]">–</p>
               )}
             </div>
-            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)]/80 p-4">
+            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 p-4 backdrop-blur-sm">
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Asian Handicap</h3>
               {odds?.asianHandicap?.length ? (
                 <div className="space-y-1 text-sm">
                   {odds.asianHandicap.map(({ home, away }, i) => (
-                    <p key={i} className="font-medium text-white">
-                      {home.line > 0 ? "+" : ""}{home.line} @ {home.odds.toFixed(2)} / {away.odds.toFixed(2)}
+                    <p key={i} className="font-medium">
+                      {home.line > 0 ? "+" : ""}{home.line} <span className="font-bold text-[var(--accent)]">{home.odds.toFixed(2)}</span> / <span className="font-bold text-[var(--accent)]">{away.odds.toFixed(2)}</span>
                     </p>
                   ))}
                 </div>
@@ -310,7 +310,7 @@ export default function MatchPreviewPage() {
         <section className="glass-card mb-6 p-5">
           <h2 className="mb-4 text-lg font-semibold text-white">Siste 5 kamper</h2>
           <div className="grid gap-6 sm:grid-cols-2">
-            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)]/80 p-4">
+            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 p-4 backdrop-blur-sm">
               <div className="mb-3 flex items-center gap-2">
                 {match.homeTeam.crest && <img src={match.homeTeam.crest} alt="" className="h-8 w-8 object-contain" />}
                 <span className="font-semibold text-white">{match.homeTeam.shortName ?? match.homeTeam.name}</span>
@@ -336,7 +336,7 @@ export default function MatchPreviewPage() {
                 </p>
               )}
             </div>
-            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)]/80 p-4">
+            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 p-4 backdrop-blur-sm">
               <div className="mb-3 flex items-center gap-2">
                 {match.awayTeam.crest && <img src={match.awayTeam.crest} alt="" className="h-8 w-8 object-contain" />}
                 <span className="font-semibold text-white">{match.awayTeam.shortName ?? match.awayTeam.name}</span>
@@ -398,12 +398,12 @@ export default function MatchPreviewPage() {
         </section>
 
         {/* 5. AI-analyse */}
-        <section className="relative rounded-2xl p-[2px] bg-gradient-to-br from-[#8b5cf6] via-[#6366f1] to-[#06b6d4] shadow-[0_0_24px_-8px_rgba(139,92,246,0.4)]">
+        <section className="relative rounded-2xl border border-[var(--card-border)] p-[2px] bg-gradient-to-br from-[var(--accent-secondary)] via-[#6366f1] to-[var(--accent)] shadow-[0_0_24px_-8px_rgba(124,58,237,0.3)]">
           <div className="relative overflow-hidden rounded-[14px] bg-[var(--glass)] p-5 backdrop-blur-sm">
-            <div className="absolute inset-0 bg-gradient-to-br from-[#8b5cf6]/5 via-transparent to-[#06b6d4]/5 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent-secondary)]/5 via-transparent to-[var(--accent)]/5 pointer-events-none" />
             <div className="relative">
             <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-gradient-to-br from-[#8b5cf6] to-[#06b6d4] text-xs font-bold text-white">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-gradient-to-br from-[var(--accent-secondary)] to-[var(--accent)] text-xs font-bold text-white">
                 AI
               </span>
               AI-analyse
@@ -411,7 +411,7 @@ export default function MatchPreviewPage() {
             {aiLoading && (
               <div className="flex flex-col items-center justify-center gap-3 py-10 text-[var(--muted)]">
                 <svg
-                  className="h-10 w-10 animate-spin text-[#8b5cf6]"
+                  className="h-10 w-10 animate-spin text-[var(--accent-secondary)]"
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
                   viewBox="0 0 24 24"

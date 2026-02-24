@@ -261,10 +261,9 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
-      {/* Hero header */}
-      <header className="hero-gradient-bg sticky top-0 z-10 border-b border-[var(--card-border)]">
-        <div className="relative mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-5">
-          <h1 className="bg-gradient-to-r from-[#14b8a6] via-[#06b6d4] to-[#8b5cf6] bg-clip-text text-2xl font-bold tracking-tight text-transparent">
+      <header className="header-sticky">
+        <div className="relative mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
             Football Betting Advisor
           </h1>
           <div className="flex flex-wrap items-center gap-4">
@@ -282,7 +281,7 @@ export default function DashboardPage() {
             <button
               onClick={handleRefresh}
               disabled={loading}
-              className="rounded-xl bg-gradient-to-r from-[#14b8a6] to-[#06b6d4] px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:opacity-90 disabled:opacity-50"
+              className="btn-primary rounded-full px-5 py-2.5 text-sm shadow-lg"
             >
               {loading ? "Oppdaterer…" : "Oppdater data"}
             </button>
@@ -318,10 +317,10 @@ export default function DashboardPage() {
                   ? "Kampen har ukes beste verdi og konfidens på Asian handicap."
                   : "Kampen har ukes beste kombinasjon av verdiscore og konfidens.";
           return (
-            <section className="relative mb-8 overflow-hidden rounded-2xl p-[2px] bg-gradient-to-r from-[#14b8a6] via-[#06b6d4] to-[#8b5cf6] shadow-[0_0_32px_-8px_rgba(20,184,166,0.4)]">
-              <div className="rounded-[14px] bg-[var(--bg)]/95 p-6 backdrop-blur-sm">
+            <section className="relative mb-8 overflow-hidden rounded-2xl border border-[var(--card-border)] p-[2px] bg-gradient-to-r from-[var(--accent)]/30 via-[var(--accent-secondary)]/20 to-[var(--accent)]/30 shadow-[0_0_40px_-12px_rgba(0,220,130,0.2)]">
+              <div className="rounded-[14px] bg-[var(--card)]/95 p-6 backdrop-blur-sm">
                 <div className="mb-4 flex items-center gap-2">
-                  <span className="rounded-lg bg-gradient-to-r from-[#14b8a6]/20 to-[#8b5cf6]/20 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[#14b8a6]">
+                  <span className="pill bg-[var(--accent)]/15 text-[var(--accent)]">
                     Ukens kamp
                   </span>
                   <span className="text-sm text-[var(--muted)]">{featuredMatch.competition.name}</span>
@@ -363,7 +362,7 @@ export default function DashboardPage() {
                     </span>
                     <Link
                       href={`/match/${featuredMatch.id}`}
-                      className="rounded-xl bg-gradient-to-r from-[#14b8a6] to-[#06b6d4] px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:opacity-90"
+                      className="btn-primary rounded-full px-4 py-2 text-sm shadow-lg"
                     >
                       Se kamp
                     </Link>
@@ -376,10 +375,10 @@ export default function DashboardPage() {
                   Beste spill: <span className="font-medium text-white">{bestRec.selection}</span> @ {bestRec.odds.toFixed(2)}
                 </p>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--glass)] p-3">
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 p-3 backdrop-blur-sm">
                     <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">BTTS</h3>
                     {odds?.btts ? (
-                      <p className="text-base font-bold text-white">
+                      <p className="text-base font-bold text-[var(--accent)]">
                         Ja @ {odds.btts.yes.toFixed(2)} / Nei @ {odds.btts.no.toFixed(2)}
                       </p>
                     ) : (
@@ -391,8 +390,8 @@ export default function DashboardPage() {
                     {odds?.overUnder && odds.overUnder.length > 0 ? (
                       <div className="space-y-1 text-sm">
                         {odds.overUnder.slice(0, 3).map((row) => (
-                          <p key={row.line} className="font-medium text-white">
-                            {row.line}: O {row.over.toFixed(2)} / U {row.under.toFixed(2)}
+                          <p key={row.line} className="font-medium">
+                            <span className="text-[var(--muted)]">{row.line}:</span> O <span className="font-bold text-[var(--accent)]">{row.over.toFixed(2)}</span> / U <span className="font-bold text-[var(--accent)]">{row.under.toFixed(2)}</span>
                           </p>
                         ))}
                       </div>
@@ -405,8 +404,8 @@ export default function DashboardPage() {
                     {odds?.asianHandicap?.length ? (
                       <div className="space-y-1 text-sm">
                         {odds.asianHandicap.slice(0, 2).map(({ home, away }, i) => (
-                          <p key={i} className="font-medium text-white">
-                            {home.line >= 0 ? "+" : ""}{home.line} @ {home.odds.toFixed(2)} / {away.odds.toFixed(2)}
+                          <p key={i} className="font-medium">
+                            {home.line >= 0 ? "+" : ""}{home.line} <span className="font-bold text-[var(--accent)]">{home.odds.toFixed(2)}</span> / <span className="font-bold text-[var(--accent)]">{away.odds.toFixed(2)}</span>
                           </p>
                         ))}
                       </div>
@@ -439,7 +438,7 @@ export default function DashboardPage() {
                     weeklyBudget: Math.max(0, Number(e.target.value) || 0),
                   })
                 }
-                className="w-32 rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-white focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
+                className="w-32 rounded-xl border border-[var(--card-border)] bg-[var(--card)] px-3 py-2.5 text-white transition duration-200 focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
               />
             </div>
             <div>
@@ -451,7 +450,7 @@ export default function DashboardPage() {
                     riskProfile: e.target.value as RiskProfile,
                   })
                 }
-                className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-white focus:border-[#14b8a6] focus:outline-none"
+                className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] px-3 py-2.5 text-white transition duration-200 focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
               >
                 <option value="low">Lav</option>
                 <option value="medium">Middels</option>
@@ -467,7 +466,7 @@ export default function DashboardPage() {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`relative flex-1 px-4 py-3.5 text-sm font-medium transition hover:text-white ${
+              className={`relative flex-1 px-4 py-3.5 text-sm font-medium transition duration-200 hover:text-white ${
                 activeTab === id ? "text-white" : "text-[var(--muted)]"
               }`}
             >
@@ -491,7 +490,7 @@ export default function DashboardPage() {
               <select
                 value={leagueFilter}
                 onChange={(e) => setLeagueFilter(e.target.value)}
-                className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2 text-sm text-white focus:border-[#14b8a6] focus:outline-none"
+                className="rounded-full border border-[var(--card-border)] bg-[var(--card)] px-4 py-2 text-sm text-white transition duration-200 focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
               >
                 {leagues.map((l) => (
                   <option key={l} value={l}>
@@ -524,27 +523,29 @@ export default function DashboardPage() {
                     {filteredMatches.map((m) => (
                       <tr
                         key={m.id}
-                        className="border-b border-[var(--card-border)] last:border-0 transition hover:bg-white/[0.03]"
+                        className="border-b border-[var(--card-border)] last:border-0 transition duration-200 hover:bg-[var(--card)]/50"
                       >
                         <td className="py-4 pr-4">
                           <div className="flex items-center gap-3">
                             {m.homeTeam.crest && (
-                              <img src={m.homeTeam.crest} alt="" className="h-6 w-6 object-contain" />
+                              <img src={m.homeTeam.crest} alt="" className="h-8 w-8 object-contain shrink-0" />
                             )}
                             <span className="font-medium text-white">
                               {m.homeTeam.shortName ?? m.homeTeam.name}
                             </span>
                             <span className="text-[var(--muted)]">–</span>
                             {m.awayTeam.crest && (
-                              <img src={m.awayTeam.crest} alt="" className="h-6 w-6 object-contain" />
+                              <img src={m.awayTeam.crest} alt="" className="h-8 w-8 object-contain shrink-0" />
                             )}
                             <span className="font-medium text-white">
                               {m.awayTeam.shortName ?? m.awayTeam.name}
                             </span>
                           </div>
                         </td>
-                        <td className="py-4 pr-4 text-[var(--muted)]">{m.competition.name}</td>
-                        <td className="py-4 pr-4 text-[var(--muted)]">{formatDate(m.utcDate)}</td>
+                        <td className="py-4 pr-4">
+                          <span className="pill bg-[var(--card)] text-[var(--muted)]">{m.competition.name}</span>
+                        </td>
+                        <td className="py-4 pr-4 text-sm text-[var(--muted)]">{formatDate(m.utcDate)}</td>
                         <td className="py-4 pr-4">
                           <OddsCell btts={m.odds?.btts} labels={{ yes: "Ja", no: "Nei" }} />
                         </td>
@@ -555,7 +556,7 @@ export default function DashboardPage() {
                           <SpreadsCell asianHandicap={m.odds?.asianHandicap} homeShort={m.homeTeam.shortName} awayShort={m.awayTeam.shortName} />
                         </td>
                         <td className="py-4">
-                          <Link href={`/match/${m.id}`} className="text-sm font-medium text-[#14b8a6] hover:underline">
+                          <Link href={`/match/${m.id}`} className="text-sm font-medium text-[var(--accent)] transition duration-200 hover:underline">
                             Se kamp
                           </Link>
                         </td>
@@ -597,11 +598,11 @@ export default function DashboardPage() {
                 </div>
               </div>
               {summary.bestBet && (
-                <div className="rounded-xl border border-[#14b8a6]/50 bg-[#14b8a6]/10 p-4">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#14b8a6]">Ukas beste spill</p>
+                <div className="rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 p-4">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Ukas beste spill</p>
                   <p className="font-medium text-white">{summary.bestBet.selection}</p>
                   <p className="text-sm text-[var(--muted)]">
-                    Odds <span className="text-xl font-bold text-white">{summary.bestBet.odds.toFixed(2)}</span> · Potensiell retur {formatNok(summary.bestBet.potentialReturnNok)}
+                    Odds <span className="text-xl font-bold text-[var(--accent)]">{summary.bestBet.odds.toFixed(2)}</span> · Potensiell retur {formatNok(summary.bestBet.potentialReturnNok)}
                   </p>
                 </div>
               )}
@@ -619,31 +620,31 @@ export default function DashboardPage() {
             <ul className="space-y-4">
               {recommendations.map((rec, i) => {
                 const valueTier = rec.odds <= 2 ? "good" : rec.odds <= 2.8 ? "medium" : "high-risk";
-                const borderClass = valueTier === "good" ? "border-[var(--value-good)]/30" : valueTier === "medium" ? "border-[var(--value-medium)]/30" : "border-[var(--value-high-risk)]/30";
+                const leftBorderClass = valueTier === "good" ? "rec-card-good" : valueTier === "medium" ? "rec-card-medium" : "rec-card-high-risk";
                 return (
                   <li
                     key={`${rec.matchId}-${rec.market}-${rec.selection}-${i}`}
-                    className={`bet-card-hover rounded-xl border ${borderClass} bg-[var(--glass)] p-4 backdrop-blur-sm`}
+                    className={`bet-card-hover ${leftBorderClass} rounded-xl border border-[var(--card-border)] bg-[var(--glass)] p-4 backdrop-blur-sm`}
                   >
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <span className="font-medium text-white">{rec.matchLabel}</span>
                       <div className="flex flex-wrap items-center gap-2">
                         <ValueScoreBadgeWithTooltip score={rec.valueScore} />
                         <ConfidenceBadgeWithTooltip score={rec.confidenceScore} />
-                        <span className="text-sm font-medium text-[#14b8a6]">{rec.league}</span>
+                        <span className="pill bg-[var(--accent)]/10 text-[var(--accent)]">{rec.league}</span>
                         <Link
                           href={`/match/${rec.matchId}`}
-                          className="text-sm font-medium text-[#14b8a6] hover:underline"
+                          className="text-sm font-medium text-[var(--accent)] transition duration-200 hover:underline"
                         >
                           Se kamp
                         </Link>
                       </div>
                     </div>
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-                      <span className="rounded-lg bg-white/5 px-2 py-1 text-[var(--fg)]">
+                      <span className="pill bg-[var(--card)]/80 text-[var(--fg)]">
                         {rec.selection}
                       </span>
-                      <span className={`text-2xl font-bold ${valueColor(rec.odds)}`}>{rec.odds.toFixed(2)}</span>
+                      <span className={`text-2xl font-bold tabular-nums ${valueColor(rec.odds)}`}>{rec.odds.toFixed(2)}</span>
                       {rec.handicapLine != null && (
                         <span className="text-[var(--muted)]">
                           Handicap: {rec.handicapLine > 0 ? "+" : ""}{rec.handicapLine}
@@ -667,16 +668,16 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={handleStartEditPlan}
-                  className="rounded-xl border border-[var(--card-border)] bg-white/5 px-4 py-2 text-sm font-medium text-white hover:bg-white/10 transition"
+                  className="rounded-full border border-[var(--card-border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-medium text-white transition duration-200 hover:bg-[var(--card)]"
                 >
                   Rediger spilleplan
                 </button>
               ) : (
                 <div className="flex gap-2">
-                  <button type="button" onClick={handleCancelEditPlan} className="rounded-xl border border-[var(--card-border)] bg-white/5 px-4 py-2 text-sm font-medium text-white hover:bg-white/10 transition">
+                  <button type="button" onClick={handleCancelEditPlan} className="rounded-full border border-[var(--card-border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-medium text-white transition duration-200 hover:bg-[var(--card)]">
                     Avbryt
                   </button>
-                  <button type="button" onClick={handleSaveEditPlan} className="rounded-xl bg-gradient-to-r from-[#14b8a6] to-[#06b6d4] px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-90 transition">
+                  <button type="button" onClick={handleSaveEditPlan} className="btn-primary rounded-full px-4 py-2 text-sm shadow-lg">
                     Lagre endringer
                   </button>
                 </div>
@@ -685,7 +686,7 @@ export default function DashboardPage() {
             <p className="mb-4 text-sm text-[var(--muted)]">
               Fordeling av budsjettet ({formatNok(settings.weeklyBudget)}) basert på risikoprofil og anbefalinger.
             </p>
-            <p className="mb-6 rounded-xl border border-[var(--card-border)] bg-[var(--bg)]/80 p-3 text-sm text-[var(--fg)]">
+            <p className="mb-6 rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 p-3 text-sm text-[var(--fg)]">
               {(planEditMode ? draftPlan ?? displayPlan : displayPlan).summaryReason}
             </p>
             <ul className="mb-6 space-y-4">
@@ -697,12 +698,12 @@ export default function DashboardPage() {
                 return (
                   <li
                     key={i}
-                    className={`bet-card-hover rounded-xl border ${borderClass} bg-[var(--glass)] p-5 backdrop-blur-sm ${isAccumulator ? "ring-1 ring-[#8b5cf6]/30" : ""}`}
+                    className={`bet-card-hover rounded-xl border ${borderClass} bg-[var(--glass)] p-5 backdrop-blur-sm transition duration-200 ${isAccumulator ? "ring-1 ring-[var(--accent-secondary)]/30" : ""}`}
                   >
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-semibold text-white">
-                          {isMega ? "🔥 High Value · Mega accumulator" : isAccumulator ? "🔥 High Value · Accumulator" : "Enkeltspill"}
+                        <span className="pill bg-[var(--card)]/80 text-white">
+                          {isMega ? "🔥 Mega accumulator" : isAccumulator ? "🔥 Accumulator" : "Enkeltspill"}
                         </span>
                         {bet.valueScore != null && (
                           <ValueScoreBadgeWithTooltip score={bet.valueScore} />
@@ -755,9 +756,9 @@ export default function DashboardPage() {
                         Forslag innsats: <strong className="text-white">{formatNok(bet.stakeNok)}</strong>
                       </span>
                     </div>
-                    <div className="mb-2 rounded-xl border border-[#14b8a6]/40 bg-[#14b8a6]/10 px-3 py-2">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-[#14b8a6]">Potensiell retur ved treff</span>
-                      <p className="text-xl font-bold text-[#14b8a6]">{formatNok(bet.potentialReturnNok)}</p>
+                    <div className="mb-2 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-3 py-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Potensiell retur ved treff</span>
+                      <p className="text-xl font-bold text-[var(--accent)]">{formatNok(bet.potentialReturnNok)}</p>
                     </div>
                     <p className="text-sm leading-relaxed text-[var(--muted)]">
                       {bet.reason}
@@ -773,7 +774,7 @@ export default function DashboardPage() {
               </div>
               <div className="text-right">
                 <span className="text-sm text-[var(--muted)]">Total mulig retur (hvis alle vinner)</span>
-                <p className="text-lg font-bold bg-gradient-to-r from-[#14b8a6] to-[#06b6d4] bg-clip-text text-transparent">{formatNok((planEditMode ? draftPlan ?? displayPlan : displayPlan)!.totalPotentialReturn)}</p>
+                <p className="text-lg font-bold text-[var(--accent)]">{formatNok((planEditMode ? draftPlan ?? displayPlan : displayPlan)!.totalPotentialReturn)}</p>
               </div>
             </div>
             <div className="mt-6 flex justify-center">
@@ -781,7 +782,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={handleConfirmPlan}
                 disabled={planEditMode}
-                className="rounded-xl bg-gradient-to-r from-[#14b8a6] to-[#06b6d4] px-8 py-4 text-lg font-bold text-white shadow-lg transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary rounded-full px-8 py-4 text-lg shadow-lg disabled:cursor-not-allowed"
               >
                 Bekreft ukens spilleplan
               </button>
@@ -926,13 +927,13 @@ function ResultsTab({
               placeholder="Kamp (f.eks. Liverpool v Chelsea)"
               value={newBet.matchLabel}
               onChange={(e) => setNewBet((b) => ({ ...b, matchLabel: e.target.value }))}
-              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
+              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
             />
             <input
               placeholder="Valg (f.eks. Over 2.5 mål)"
               value={newBet.selection}
               onChange={(e) => setNewBet((b) => ({ ...b, selection: e.target.value }))}
-              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
+              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
             />
             <input
               type="number"
@@ -940,7 +941,7 @@ function ResultsTab({
               placeholder="Odds"
               value={newBet.odds}
               onChange={(e) => setNewBet((b) => ({ ...b, odds: e.target.value }))}
-              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
+              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
             />
             <input
               type="number"
@@ -948,10 +949,10 @@ function ResultsTab({
               placeholder="Innsats (NOK)"
               value={newBet.stake}
               onChange={(e) => setNewBet((b) => ({ ...b, stake: e.target.value }))}
-              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
+              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
             />
           </div>
-          <button type="button" onClick={handleAddBet} className="mt-3 rounded-xl bg-gradient-to-r from-[#14b8a6] to-[#06b6d4] px-4 py-2.5 text-sm font-semibold text-white shadow-lg hover:opacity-90 transition">
+          <button type="button" onClick={handleAddBet} className="mt-3 btn-primary rounded-full px-4 py-2.5 text-sm shadow-lg">
             Legg til
           </button>
         </div>
@@ -1038,7 +1039,7 @@ function ResultsTab({
                       contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--card-border)", borderRadius: "12px" }}
                       formatter={(value: number | undefined) => [formatNok(value ?? 0), "Kumulativt"]}
                     />
-                    <Line type="monotone" dataKey="cumulative" stroke="#14b8a6" strokeWidth={2} dot={{ fill: "#14b8a6", r: 3 }} name="Kumulativt" />
+                    <Line type="monotone" dataKey="cumulative" stroke="#00dc82" strokeWidth={2} dot={{ fill: "#00dc82", r: 3 }} name="Kumulativt" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -1323,9 +1324,9 @@ function OddsCell({
   if (yes == null || no == null) return <span className="text-[var(--muted)]">–</span>;
   return (
     <div className="text-sm">
-      <span><span className="text-[var(--muted)]">{labels.yes}</span> <span className={`font-bold ${valueColor(yes)}`}>@ {yes.toFixed(2)}</span></span>
+      <span><span className="text-[var(--muted)]">{labels.yes}</span> <span className="font-bold text-[var(--accent)] tabular-nums">@ {yes.toFixed(2)}</span></span>
       <span className="text-[var(--muted)]"> / </span>
-      <span><span className="text-[var(--muted)]">{labels.no}</span> <span className={`font-bold ${valueColor(no)}`}>@ {no.toFixed(2)}</span></span>
+      <span><span className="text-[var(--muted)]">{labels.no}</span> <span className="font-bold text-[var(--accent)] tabular-nums">@ {no.toFixed(2)}</span></span>
     </div>
   );
 }
@@ -1337,7 +1338,7 @@ function TotalsCell({ overUnder }: { overUnder?: Array<{ line: number; over: num
     <div className="space-y-1.5 text-sm">
       {sorted.map(({ line, over, under }) => (
         <div key={line} className="space-y-0.5">
-          <div className="text-[var(--muted)]">O {line} <span className={`font-bold ${valueColor(over)}`}>@ {over.toFixed(2)}</span> / U {line} <span className={`font-bold ${valueColor(under)}`}>@ {under.toFixed(2)}</span></div>
+          <div className="text-[var(--muted)]">O {line} <span className="font-bold text-[var(--accent)] tabular-nums">@ {over.toFixed(2)}</span> / U {line} <span className="font-bold text-[var(--accent)] tabular-nums">@ {under.toFixed(2)}</span></div>
         </div>
       ))}
     </div>
@@ -1364,8 +1365,8 @@ function SpreadsCell({
     <div className="space-y-1.5 text-sm">
       {asianHandicap.map(({ home, away }, i) => (
         <div key={i} className="space-y-0.5">
-          <div><span className="text-[var(--muted)]">{homeLabel} {formatHandicap(home.line)}</span> <span className={`font-bold ${valueColor(home.odds)}`}>@ {home.odds.toFixed(2)}</span></div>
-          <div><span className="text-[var(--muted)]">{awayLabel} {formatHandicap(away.line)}</span> <span className={`font-bold ${valueColor(away.odds)}`}>@ {away.odds.toFixed(2)}</span></div>
+          <div><span className="text-[var(--muted)]">{homeLabel} {formatHandicap(home.line)}</span> <span className="font-bold text-[var(--accent)] tabular-nums">@ {home.odds.toFixed(2)}</span></div>
+          <div><span className="text-[var(--muted)]">{awayLabel} {formatHandicap(away.line)}</span> <span className="font-bold text-[var(--accent)] tabular-nums">@ {away.odds.toFixed(2)}</span></div>
         </div>
       ))}
     </div>

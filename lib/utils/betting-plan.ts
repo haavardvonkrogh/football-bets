@@ -1,5 +1,12 @@
 import type { BetRecommendation, RiskProfile, WeeklyBettingPlan, PlannedBet } from "@/lib/types";
 
+/** Target total potential return as multiplier of weekly budget (min–max). */
+const RETURN_MULTIPLIERS: Record<RiskProfile, { min: number; max: number }> = {
+  low: { min: 1.2, max: 1.8 },
+  medium: { min: 3, max: 6 },
+  high: { min: 10, max: 30 },
+};
+
 /** Sort planned bets by value score (highest first). */
 function sortByValueScore(plannedBets: PlannedBet[]): PlannedBet[] {
   return [...plannedBets].sort((a, b) => (b.valueScore ?? 0) - (a.valueScore ?? 0));
@@ -40,10 +47,11 @@ function normalizeStakesToBudget(plannedBets: PlannedBet[], weeklyBudgetNok: num
 
 /**
  * Build a weekly betting plan from recommendations, budget and risk profile.
- * Low: 3–4 singles, 10–15% per bet, odds 1.6–2.2.
- * Medium: 3–4 singles + one 2-fold, 15–25% per bet, acca 20%, odds 1.8–2.8.
- * High: 2–3 singles + 3-fold + 4-fold, 25–40% per single, 30% on accas, odds 2.5–5.0, prioritize value.
- * Stakes are normalized so total always equals 100% of weekly budget.
+ * Total potential return scales with budget:
+ * - Low: 1.2x–1.8x budget (e.g. 500 → 600–900 NOK)
+ * - Medium: 3x–6x budget (e.g. 500 → 1500–3000 NOK)
+ * - High: 10x–30x budget (e.g. 500 → 5000–15000 NOK)
+ * Stakes are % of budget; odds targets and leg counts are chosen to hit these return ranges.
  */
 export function getWeeklyBettingPlan(
   recommendations: BetRecommendation[],
@@ -56,8 +64,9 @@ export function getWeeklyBettingPlan(
   const plannedBets: PlannedBet[] = [];
 
   if (riskProfile === "low") {
-    // 3–4 singles, 10–15% per bet, odds 1.6–2.2
-    const inRange = recommendations.filter((r) => r.odds >= 1.6 && r.odds <= 2.2);
+    // Target total return 1.2x–1.8x budget. With 3–4 singles at ~25% each, we need odds 1.2–1.8.
+    const { min: minMult, max: maxMult } = RETURN_MULTIPLIERS.low;
+    const inRange = recommendations.filter((r) => r.odds >= minMult && r.odds <= maxMult);
     const picks = (inRange.length >= 3 ? inRange : recommendations).slice(0, 4);
     if (picks.length === 0) return null;
     const n = picks.length;
@@ -78,7 +87,7 @@ export function getWeeklyBettingPlan(
         odds: rec.odds,
         stakeNok: stake,
         potentialReturnNok: Math.round(stake * rec.odds * 100) / 100,
-        reason: `Lav risiko: enkeltspill med odds 1,6–2,2. Innsats ${pctPerBet}% av budsjettet.`,
+        reason: `Lav risiko: enkeltspill med odds ${minMult}–${maxMult}. Innsats ${pctPerBet}% av budsjettet.`,
         valueScore: rec.valueScore,
         confidenceScore: rec.confidenceScore,
       });
@@ -86,21 +95,41 @@ export function getWeeklyBettingPlan(
     const normalized = sortByValueScore(normalizeStakesToBudget(plannedBets, budget));
     const totalStaked = normalized.reduce((s, b) => s + b.stakeNok, 0);
     const totalReturn = normalized.reduce((s, b) => s + b.potentialReturnNok, 0);
+    const targetMin = Math.round(budget * minMult);
+    const targetMax = Math.round(budget * maxMult);
     return {
       plannedBets: normalized,
       totalStaked,
       totalPotentialReturn: Math.round(totalReturn * 100) / 100,
-      summaryReason: `Lav risiko: ${normalized.length} enkeltspill, 10–15% av budsjettet per bet, odds 1,6–2,2. Ingen akkumulatorer. Total mulig retur ved alle treff: ${Math.round(totalReturn * 100) / 100} NOK.`,
+      summaryReason: `Lav risiko: ${normalized.length} enkeltspill, 10–15% av budsjettet per bet, odds ${minMult}–${maxMult}. Total mulig retur ved alle treff: ${Math.round(totalReturn * 100) / 100} NOK (mål: ${targetMin}–${targetMax} NOK).`,
     };
   }
 
   if (riskProfile === "medium") {
-    // 3–4 singles (15–25% per bet) + one 2-fold (20% of budget), odds 1.8–2.8
-    const inRange = recommendations.filter((r) => r.odds >= 1.8 && r.odds <= 2.8);
+    // Target total return 3x–6x budget. 4 singles (20% each) + 1 2-fold (20%). Need sum_singles*0.2 + acca*0.2 in [3,6] => sum_singles + acca in [15,30].
+    const { min: minMult, max: maxMult } = RETURN_MULTIPLIERS.medium;
+    const singleOddsMin = 1.9;
+    const singleOddsMax = 2.7;
+    const inRange = recommendations.filter((r) => r.odds >= singleOddsMin && r.odds <= singleOddsMax);
     const pool = inRange.length >= 4 ? inRange : recommendations;
     const singlePicks = pool.slice(0, 4);
     const usedMatchIds = new Set(singlePicks.map((r) => r.matchId));
-    const accaLegs = pool.filter((r) => !usedMatchIds.has(r.matchId)).slice(0, 2);
+    const accaPool = pool.filter((r) => !usedMatchIds.has(r.matchId));
+    // Prefer 2-fold with combined odds in [6, 20] to land total in 3–6x
+    let accaLegs: BetRecommendation[] = [];
+    for (let i = 0; i < accaPool.length; i++) {
+      for (let j = i + 1; j < accaPool.length; j++) {
+        const a = accaPool[i];
+        const b = accaPool[j];
+        const product = a.odds * b.odds;
+        if (product >= 6 && product <= 20) {
+          accaLegs = [a, b];
+          break;
+        }
+      }
+      if (accaLegs.length >= 2) break;
+    }
+    if (accaLegs.length < 2 && accaPool.length >= 2) accaLegs = accaPool.slice(0, 2);
     const hasAcca = accaLegs.length >= 2;
     const accaStakeNok = hasAcca ? Math.floor(budget * 0.2) : 0; // 20%
     const singleBudget = budget - accaStakeNok;
@@ -122,7 +151,7 @@ export function getWeeklyBettingPlan(
         odds: rec.odds,
         stakeNok: stake,
         potentialReturnNok: Math.round(stake * rec.odds * 100) / 100,
-        reason: `Enkeltspill 15–25% av budsjettet, odds 1,8–2,8. Mulig retur: ${Math.round(stake * rec.odds * 100) / 100} NOK.`,
+        reason: `Enkeltspill 15–25% av budsjettet, odds ${singleOddsMin}–${singleOddsMax}. Mulig retur: ${Math.round(stake * rec.odds * 100) / 100} NOK.`,
         valueScore: rec.valueScore,
         confidenceScore: rec.confidenceScore,
       });
@@ -147,16 +176,19 @@ export function getWeeklyBettingPlan(
     const normalized = sortByValueScore(normalizeStakesToBudget(plannedBets, budget));
     const totalStaked = normalized.reduce((s, b) => s + b.stakeNok, 0);
     const totalReturn = normalized.reduce((s, b) => s + b.potentialReturnNok, 0);
+    const targetMin = Math.round(budget * minMult);
+    const targetMax = Math.round(budget * maxMult);
     return {
       plannedBets: normalized,
       totalStaked,
       totalPotentialReturn: Math.round(totalReturn * 100) / 100,
-      summaryReason: `Middels risiko: ${singlePicks.length} enkeltspill (15–25% per bet) + én 2-fold (20% av budsjettet). Odds 1,8–2,8. Total mulig retur ved alle treff: ${Math.round(totalReturn * 100) / 100} NOK.`,
+      summaryReason: `Middels risiko: ${singlePicks.length} enkeltspill (15–25% per bet) + én 2-fold (20% av budsjettet). Mål total retur: ${targetMin}–${targetMax} NOK. Total mulig retur ved alle treff: ${Math.round(totalReturn * 100) / 100} NOK.`,
     };
   }
 
-  // High risk: Mega (20%) → Four-fold (15%) → Three-fold (15%) → Single (25%) → Single (25%)
-  // Prefer Over 2.5, Over 3.5, BTTS Yes; fall back to ANY recs (Under, Asian Handicap) to fill. Always show at least mega + 1 single when possible.
+  // High risk: target total return 10x–30x budget. Mega (20%) + 4-fold (15%) + 3-fold (15%) + 2 singles (25% each).
+  // Prefer acca legs with odds 2.0–3.2 so combined odds stay in range (e.g. 5-fold 32–335, 0.2*100 ≈ 20).
+  const { min: minMult, max: maxMult } = RETURN_MULTIPLIERS.high;
   const sel = (r: BetRecommendation) => r.selection.toLowerCase();
   const isOver = (r: BetRecommendation) => r.market === "totals" && sel(r).includes("over");
   const isBttsYes = (r: BetRecommendation) =>
@@ -164,10 +196,10 @@ export function getWeeklyBettingPlan(
   const isOverOrBtts = (r: BetRecommendation) => isOver(r) || isBttsYes(r);
 
   const preferredPool = [...recommendations]
-    .filter((r) => r.odds >= 2.0 && isOverOrBtts(r))
+    .filter((r) => r.odds >= 2.0 && r.odds <= 3.2 && isOverOrBtts(r))
     .sort((a, b) => b.odds - a.odds);
   const fallbackPool = [...recommendations]
-    .filter((r) => r.odds >= 2.0)
+    .filter((r) => r.odds >= 2.0 && r.odds <= 4.0)
     .sort((a, b) => b.odds - a.odds);
 
   if (typeof console !== "undefined" && console.log) {
@@ -365,10 +397,12 @@ export function getWeeklyBettingPlan(
   const normalized = sortByValueScore(normalizeStakesToBudget(plannedBets, budget));
   const totalStaked = normalized.reduce((s, b) => s + b.stakeNok, 0);
   const totalReturn = normalized.reduce((s, b) => s + b.potentialReturnNok, 0);
+  const targetMin = Math.round(budget * minMult);
+  const targetMax = Math.round(budget * maxMult);
   return {
     plannedBets: normalized,
     totalStaked,
     totalPotentialReturn: Math.round(totalReturn * 100) / 100,
-    summaryReason: `Høy risiko: 1 mega (5 kamper, 20%) + 1 four-fold (15%) + 1 three-fold (15%) + 2 enkeltspill (25% hver). Kun Over 2.5/3.5 og BTTS Ja. Total potensiell retur ved alle treff: ${Math.round(totalReturn * 100) / 100} NOK.`,
+    summaryReason: `Høy risiko: 1 mega (5 kamper, 20%) + 1 four-fold (15%) + 1 three-fold (15%) + 2 enkeltspill (25% hver). Mål total retur: ${targetMin}–${targetMax} NOK. Total potensiell retur ved alle treff: ${Math.round(totalReturn * 100) / 100} NOK.`,
   };
 }
