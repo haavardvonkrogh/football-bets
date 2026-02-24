@@ -155,84 +155,75 @@ export function getWeeklyBettingPlan(
     };
   }
 
-  // High (aggressive): 2 singles (3.0–6.0, 25% each) + 3-fold (10–20, 15%) + 4-fold (25–50, 15%) + mega 5–6 fold (60–150+, 20%)
-  // Prioritize: higher odds, Over 2.5, BTTS Yes, Asian handicap underdogs
-  const preferred = (r: BetRecommendation) =>
-    (r.market === "totals" && r.selection.toLowerCase().includes("over")) ||
-    (r.market === "btts" && (r.selection.toLowerCase().includes("yes") || r.selection.toLowerCase().includes("ja"))) ||
-    r.market === "spreads";
-  const pool = [...recommendations]
+  // High risk: Mega (20%) → Four-fold (15%) → Three-fold (15%) → Single (25%) → Single (25%)
+  // Prefer Over 2.5, Over 3.5, BTTS Yes; fall back to ANY recs (Under, Asian Handicap) to fill. Always show at least mega + 1 single when possible.
+  const sel = (r: BetRecommendation) => r.selection.toLowerCase();
+  const isOver = (r: BetRecommendation) => r.market === "totals" && sel(r).includes("over");
+  const isBttsYes = (r: BetRecommendation) =>
+    r.market === "btts" && (sel(r).includes("yes") || sel(r).includes("ja"));
+  const isOverOrBtts = (r: BetRecommendation) => isOver(r) || isBttsYes(r);
+
+  const preferredPool = [...recommendations]
+    .filter((r) => r.odds >= 2.0 && isOverOrBtts(r))
+    .sort((a, b) => b.odds - a.odds);
+  const fallbackPool = [...recommendations]
     .filter((r) => r.odds >= 2.0)
-    .sort((a, b) => {
-      const pa = preferred(a) ? 1 : 0;
-      const pb = preferred(b) ? 1 : 0;
-      if (pb !== pa) return pb - pa;
-      return b.odds - a.odds;
-    });
+    .sort((a, b) => b.odds - a.odds);
+
+  if (typeof console !== "undefined" && console.log) {
+    console.log("[High risk] Over/BTTS recommendations available:", preferredPool.length, "| Total recommendations (odds >= 2):", fallbackPool.length);
+  }
 
   const usedMatchIds = new Set<number>();
-  const take = (n: number, minOdds?: number, maxOdds?: number): BetRecommendation[] => {
+  const takeFrom = (pool: BetRecommendation[], n: number): BetRecommendation[] => {
     const out: BetRecommendation[] = [];
     for (const r of pool) {
       if (usedMatchIds.has(r.matchId)) continue;
-      if (minOdds != null && r.odds < minOdds) continue;
-      if (maxOdds != null && r.odds > maxOdds) continue;
       out.push(r);
       usedMatchIds.add(r.matchId);
       if (out.length >= n) break;
     }
     return out;
   };
+  const take = (n: number): BetRecommendation[] => {
+    const fromPreferred = takeFrom(preferredPool, n);
+    const needed = n - fromPreferred.length;
+    if (needed <= 0) return fromPreferred;
+    const fromFallback = takeFrom(fallbackPool, needed);
+    return [...fromPreferred, ...fromFallback];
+  };
 
-  const singleLegs = take(2, 3.0, 6.0); // 2 singles, odds 3.0–6.0
-  const threeFoldLegs = take(3); // next 3 for 3-fold (target 10–20 combined)
-  const fourFoldLegs = take(4); // next 4 for 4-fold (target 25–50)
-  const megaLegs = take(6); // up to 6 for mega (target 60–150+); use 5 if only 5 available
+  const megaLegs = take(5);
+  const fourFoldLegs = take(4);
+  const threeFoldLegs = take(3);
+  const single1 = take(1)[0];
+  const single2 = take(1)[0];
 
-  const stakeSingle = Math.floor(budget * 0.25); // 25% each
-  const stake3 = Math.floor(budget * 0.15); // 15%
-  const stake4 = Math.floor(budget * 0.15); // 15%
-  const stakeMega = Math.floor(budget * 0.2); // 20%
+  const stakeMega = Math.round(budget * 0.2);
+  const stake4 = Math.round(budget * 0.15);
+  const stake3 = Math.round(budget * 0.15);
+  const stakeSingle = Math.round(budget * 0.25);
 
-  for (const rec of singleLegs) {
-    const ret = Math.round(stakeSingle * rec.odds * 100) / 100;
-    plannedBets.push({
-      type: "single",
-      matchId: rec.matchId,
-      market: rec.market,
-      matchLabel: rec.matchLabel,
-      selection: `${rec.matchLabel}: ${rec.selection}`,
-      odds: rec.odds,
-      stakeNok: stakeSingle,
-      potentialReturnNok: ret,
-      reason: `Verdibet (odds 3,0–6,0), 25% av budsjettet. Prioriterer Over 2.5 / BTTS Ja / Asian handicap. Potensiell retur ved treff: ${ret} NOK.`,
-      valueScore: rec.valueScore,
-      confidenceScore: rec.confidenceScore,
-    });
-  }
-
-  if (threeFoldLegs.length >= 3) {
-    const combined = threeFoldLegs[0].odds * threeFoldLegs[1].odds * threeFoldLegs[2].odds;
-    const ret = Math.round(stake3 * combined * 100) / 100;
+  if (megaLegs.length >= 5) {
+    const combined = megaLegs.reduce((p, l) => p * l.odds, 1);
     plannedBets.push({
       type: "accumulator",
-      legs: threeFoldLegs,
-      matchId: threeFoldLegs[0].matchId,
+      legs: megaLegs,
+      matchId: megaLegs[0].matchId,
       market: "totals",
-      matchLabel: threeFoldLegs.map((l) => l.matchLabel).join(" · "),
-      selection: threeFoldLegs.map((l, i) => `Kamp ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
+      matchLabel: megaLegs.map((l) => l.matchLabel).join(" · "),
+      selection: megaLegs.map((l, i) => `Kamp ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
       odds: Math.round(combined * 100) / 100,
-      stakeNok: stake3,
-      potentialReturnNok: ret,
-      reason: `3-fold (sikter kombinert odds 10–20), 15% av budsjettet. Potensiell retur ved treff: ${ret} NOK.`,
-      valueScore: Math.min(...threeFoldLegs.map((l) => l.valueScore)),
-      confidenceScore: Math.min(...threeFoldLegs.map((l) => l.confidenceScore)),
+      stakeNok: stakeMega,
+      potentialReturnNok: Math.round(stakeMega * combined * 100) / 100,
+      reason: `Mega-akkumulator (5 kamper, Over/BTTS Ja), 20% av budsjettet. Potensiell retur ved treff: ${Math.round(stakeMega * combined * 100) / 100} NOK.`,
+      valueScore: Math.min(...megaLegs.map((l) => l.valueScore)),
+      confidenceScore: Math.min(...megaLegs.map((l) => l.confidenceScore)),
     });
   }
 
   if (fourFoldLegs.length >= 4) {
-    const combined = fourFoldLegs[0].odds * fourFoldLegs[1].odds * fourFoldLegs[2].odds * fourFoldLegs[3].odds;
-    const ret = Math.round(stake4 * combined * 100) / 100;
+    const combined = fourFoldLegs.reduce((p, l) => p * l.odds, 1);
     plannedBets.push({
       type: "accumulator",
       legs: fourFoldLegs,
@@ -242,42 +233,142 @@ export function getWeeklyBettingPlan(
       selection: fourFoldLegs.map((l, i) => `Kamp ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
       odds: Math.round(combined * 100) / 100,
       stakeNok: stake4,
-      potentialReturnNok: ret,
-      reason: `4-fold (sikter kombinert odds 25–50), 15% av budsjettet. Potensiell retur ved treff: ${ret} NOK.`,
+      potentialReturnNok: Math.round(stake4 * combined * 100) / 100,
+      reason: `4-fold (Over 2.5 / BTTS Ja), 15% av budsjettet. Potensiell retur ved treff: ${Math.round(stake4 * combined * 100) / 100} NOK.`,
       valueScore: Math.min(...fourFoldLegs.map((l) => l.valueScore)),
       confidenceScore: Math.min(...fourFoldLegs.map((l) => l.confidenceScore)),
     });
   }
 
-  const megaCount = megaLegs.length >= 5 ? (megaLegs.length >= 6 ? 6 : 5) : 0;
-  const megaUse = megaLegs.slice(0, megaCount);
-  if (megaUse.length >= 5) {
-    const combined = megaUse.reduce((p, l) => p * l.odds, 1);
-    const ret = Math.round(stakeMega * combined * 100) / 100;
+  if (threeFoldLegs.length >= 3) {
+    const combined = threeFoldLegs.reduce((p, l) => p * l.odds, 1);
     plannedBets.push({
       type: "accumulator",
-      legs: megaUse,
-      matchId: megaUse[0].matchId,
+      legs: threeFoldLegs,
+      matchId: threeFoldLegs[0].matchId,
       market: "totals",
-      matchLabel: megaUse.map((l) => l.matchLabel).join(" · "),
-      selection: megaUse.map((l, i) => `Kamp ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
+      matchLabel: threeFoldLegs.map((l) => l.matchLabel).join(" · "),
+      selection: threeFoldLegs.map((l, i) => `Kamp ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
       odds: Math.round(combined * 100) / 100,
-      stakeNok: stakeMega,
-      potentialReturnNok: ret,
-      reason: `Mega-akkumulator (${megaCount}-fold, sikter odds 60–150+), 20% av budsjettet. Potensiell retur ved treff: ${ret} NOK.`,
-      valueScore: Math.min(...megaUse.map((l) => l.valueScore)),
-      confidenceScore: Math.min(...megaUse.map((l) => l.confidenceScore)),
+      stakeNok: stake3,
+      potentialReturnNok: Math.round(stake3 * combined * 100) / 100,
+      reason: `3-fold (Over 2.5 / BTTS Ja), 15% av budsjettet. Potensiell retur ved treff: ${Math.round(stake3 * combined * 100) / 100} NOK.`,
+      valueScore: Math.min(...threeFoldLegs.map((l) => l.valueScore)),
+      confidenceScore: Math.min(...threeFoldLegs.map((l) => l.confidenceScore)),
+    });
+  }
+
+  if (single1) {
+    plannedBets.push({
+      type: "single",
+      matchId: single1.matchId,
+      market: single1.market,
+      matchLabel: single1.matchLabel,
+      selection: `${single1.matchLabel}: ${single1.selection}`,
+      odds: single1.odds,
+      stakeNok: stakeSingle,
+      potentialReturnNok: Math.round(stakeSingle * single1.odds * 100) / 100,
+      reason: `Enkeltspill (høyest odds, Over/BTTS), 25% av budsjettet. Potensiell retur: ${Math.round(stakeSingle * single1.odds * 100) / 100} NOK.`,
+      valueScore: single1.valueScore,
+      confidenceScore: single1.confidenceScore,
+    });
+  }
+
+  if (single2) {
+    plannedBets.push({
+      type: "single",
+      matchId: single2.matchId,
+      market: single2.market,
+      matchLabel: single2.matchLabel,
+      selection: `${single2.matchLabel}: ${single2.selection}`,
+      odds: single2.odds,
+      stakeNok: stakeSingle,
+      potentialReturnNok: Math.round(stakeSingle * single2.odds * 100) / 100,
+      reason: `Enkeltspill (nest høyest odds, Over/BTTS), 25% av budsjettet. Potensiell retur: ${Math.round(stakeSingle * single2.odds * 100) / 100} NOK.`,
+      valueScore: single2.valueScore,
+      confidenceScore: single2.confidenceScore,
+    });
+  }
+
+  if (plannedBets.length === 0 && megaLegs.length >= 1) {
+    if (megaLegs.length >= 3) {
+      const legs = megaLegs.slice(0, 3);
+      const combined = legs.reduce((p, l) => p * l.odds, 1);
+      plannedBets.push({
+        type: "accumulator",
+        legs,
+        matchId: legs[0].matchId,
+        market: "totals",
+        matchLabel: legs.map((l) => l.matchLabel).join(" · "),
+        selection: legs.map((l, i) => `Kamp ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
+        odds: Math.round(combined * 100) / 100,
+        stakeNok: Math.round(budget * 0.5),
+        potentialReturnNok: Math.round(Math.round(budget * 0.5) * combined * 100) / 100,
+        reason: `3-fold (høy risiko, få anbefalinger), 50% av budsjettet.`,
+        valueScore: Math.min(...legs.map((l) => l.valueScore)),
+        confidenceScore: Math.min(...legs.map((l) => l.confidenceScore)),
+      });
+    }
+    if (megaLegs.length >= 2 && megaLegs.length < 3) {
+      const legs = megaLegs.slice(0, 2);
+      const combined = legs[0].odds * legs[1].odds;
+      plannedBets.push({
+        type: "accumulator",
+        legs,
+        matchId: legs[0].matchId,
+        market: "totals",
+        matchLabel: legs.map((l) => l.matchLabel).join(" · "),
+        selection: legs.map((l, i) => `Kamp ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
+        odds: Math.round(combined * 100) / 100,
+        stakeNok: Math.round(budget * 0.5),
+        potentialReturnNok: Math.round(Math.round(budget * 0.5) * combined * 100) / 100,
+        reason: `2-fold (høy risiko, få anbefalinger), 50% av budsjettet.`,
+        valueScore: Math.min(...legs.map((l) => l.valueScore)),
+        confidenceScore: Math.min(...legs.map((l) => l.confidenceScore)),
+      });
+    }
+    if (megaLegs.length === 1) {
+      const rec = megaLegs[0];
+      plannedBets.push({
+        type: "single",
+        matchId: rec.matchId,
+        market: rec.market,
+        matchLabel: rec.matchLabel,
+        selection: `${rec.matchLabel}: ${rec.selection}`,
+        odds: rec.odds,
+        stakeNok: budget,
+        potentialReturnNok: Math.round(budget * rec.odds * 100) / 100,
+        reason: `Enkeltspill (høy risiko, én anbefaling), 100% av budsjettet.`,
+        valueScore: rec.valueScore,
+        confidenceScore: rec.confidenceScore,
+      });
+    }
+  }
+
+  if (plannedBets.length === 0 && recommendations.length > 0) {
+    const best = [...recommendations].sort((a, b) => b.odds - a.odds)[0];
+    plannedBets.push({
+      type: "single",
+      matchId: best.matchId,
+      market: best.market,
+      matchLabel: best.matchLabel,
+      selection: `${best.matchLabel}: ${best.selection}`,
+      odds: best.odds,
+      stakeNok: budget,
+      potentialReturnNok: Math.round(budget * best.odds * 100) / 100,
+      reason: `Enkeltspill (høy risiko, bruker beste tilgjengelige anbefaling), 100% av budsjettet.`,
+      valueScore: best.valueScore,
+      confidenceScore: best.confidenceScore,
     });
   }
 
   const normalized = sortByValueScore(normalizeStakesToBudget(plannedBets, budget));
   const totalStaked = normalized.reduce((s, b) => s + b.stakeNok, 0);
   const totalReturn = normalized.reduce((s, b) => s + b.potentialReturnNok, 0);
-  const megaText = megaCount >= 5 ? ` + mega ${megaCount}-fold (20%, odds 60–150+)` : "";
   return {
     plannedBets: normalized,
     totalStaked,
     totalPotentialReturn: Math.round(totalReturn * 100) / 100,
-    summaryReason: `Høy risiko: 2 enkeltspill (25% hver, odds 3–6) + 3-fold (15%, odds 10–20) + 4-fold (15%, odds 25–50)${megaText}. Prioriterer Over 2.5, BTTS Ja og Asian handicap. Total potensiell retur ved alle treff: ${Math.round(totalReturn * 100) / 100} NOK.`,
+    summaryReason: `Høy risiko: 1 mega (5 kamper, 20%) + 1 four-fold (15%) + 1 three-fold (15%) + 2 enkeltspill (25% hver). Kun Over 2.5/3.5 og BTTS Ja. Total potensiell retur ved alle treff: ${Math.round(totalReturn * 100) / 100} NOK.`,
   };
 }
