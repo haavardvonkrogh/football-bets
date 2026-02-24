@@ -2,6 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  BarChart,
+  Bar,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+} from "recharts";
 import type { UpcomingMatch } from "@/lib/types";
 import type { UserSettings, RiskProfile, WeeklyBettingPlan, PlannedBet, BetRecommendation } from "@/lib/types";
 import {
@@ -16,6 +28,7 @@ import {
   addPlacedBet,
   getCurrentWeekKey,
   confirmWeeklyPlan,
+  removeWeekFromResults,
   type StoredUsage,
 } from "@/lib/utils/storage";
 import { getRecommendations } from "@/lib/utils/recommendations";
@@ -283,6 +296,133 @@ export default function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-8">
+        {/* Ukens kamp - featured match */}
+        {(() => {
+          const bestRec =
+            recommendations.length > 0
+              ? recommendations.reduce((a, b) =>
+                  a.valueScore + a.confidenceScore >= b.valueScore + b.confidenceScore ? a : b
+                )
+              : null;
+          const featuredMatch = bestRec
+            ? filteredMatches.find((m) => m.id === bestRec.matchId)
+            : null;
+          if (!featuredMatch || !bestRec) return null;
+          const odds = featuredMatch.odds;
+          const featuredReason =
+            bestRec.market === "totals" && bestRec.selection.toLowerCase().includes("over")
+              ? "Kampen har ukes beste verdi og konfidens på Over-markedet."
+              : bestRec.market === "btts"
+                ? "Kampen har ukes beste verdi og konfidens på BTTS-markedet."
+                : bestRec.market === "spreads"
+                  ? "Kampen har ukes beste verdi og konfidens på Asian handicap."
+                  : "Kampen har ukes beste kombinasjon av verdiscore og konfidens.";
+          return (
+            <section className="relative mb-8 overflow-hidden rounded-2xl p-[2px] bg-gradient-to-r from-[#14b8a6] via-[#06b6d4] to-[#8b5cf6] shadow-[0_0_32px_-8px_rgba(20,184,166,0.4)]">
+              <div className="rounded-[14px] bg-[var(--bg)]/95 p-6 backdrop-blur-sm">
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="rounded-lg bg-gradient-to-r from-[#14b8a6]/20 to-[#8b5cf6]/20 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[#14b8a6]">
+                    Ukens kamp
+                  </span>
+                  <span className="text-sm text-[var(--muted)]">{featuredMatch.competition.name}</span>
+                </div>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-6">
+                  <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
+                    <div className="flex flex-col items-center gap-2">
+                      {featuredMatch.homeTeam.crest && (
+                        <img
+                          src={featuredMatch.homeTeam.crest}
+                          alt=""
+                          className="h-14 w-14 object-contain sm:h-16 sm:w-16"
+                        />
+                      )}
+                      <span className="text-center font-bold text-white sm:text-lg">
+                        {featuredMatch.homeTeam.shortName ?? featuredMatch.homeTeam.name}
+                      </span>
+                    </div>
+                    <span className="text-xl font-bold text-[var(--muted)]">vs</span>
+                    <div className="flex flex-col items-center gap-2">
+                      {featuredMatch.awayTeam.crest && (
+                        <img
+                          src={featuredMatch.awayTeam.crest}
+                          alt=""
+                          className="h-14 w-14 object-contain sm:h-16 sm:w-16"
+                        />
+                      )}
+                      <span className="text-center font-bold text-white sm:text-lg">
+                        {featuredMatch.awayTeam.shortName ?? featuredMatch.awayTeam.name}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="cursor-help text-xs font-semibold text-[var(--value-good)]" title="Verdiscore">
+                      Verdi: {bestRec.valueScore}/10
+                    </span>
+                    <span className="cursor-help text-xs font-semibold text-[var(--value-medium)]" title="Konfidens">
+                      Konfidens: {bestRec.confidenceScore}%
+                    </span>
+                    <Link
+                      href={`/match/${featuredMatch.id}`}
+                      className="rounded-xl bg-gradient-to-r from-[#14b8a6] to-[#06b6d4] px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:opacity-90"
+                    >
+                      Se kamp
+                    </Link>
+                  </div>
+                </div>
+                <p className="mb-2 text-sm leading-relaxed text-[var(--fg)]">
+                  {featuredReason}
+                </p>
+                <p className="mb-4 text-xs text-[var(--muted)]">
+                  Beste spill: <span className="font-medium text-white">{bestRec.selection}</span> @ {bestRec.odds.toFixed(2)}
+                </p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--glass)] p-3">
+                    <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">BTTS</h3>
+                    {odds?.btts ? (
+                      <p className="text-base font-bold text-white">
+                        Ja @ {odds.btts.yes.toFixed(2)} / Nei @ {odds.btts.no.toFixed(2)}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-[var(--muted)]">–</p>
+                    )}
+                  </div>
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--glass)] p-3">
+                    <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Over/Under</h3>
+                    {odds?.overUnder && odds.overUnder.length > 0 ? (
+                      <div className="space-y-1 text-sm">
+                        {odds.overUnder.slice(0, 3).map((row) => (
+                          <p key={row.line} className="font-medium text-white">
+                            {row.line}: O {row.over.toFixed(2)} / U {row.under.toFixed(2)}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-[var(--muted)]">–</p>
+                    )}
+                  </div>
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--glass)] p-3">
+                    <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Asian Handicap</h3>
+                    {odds?.asianHandicap?.length ? (
+                      <div className="space-y-1 text-sm">
+                        {odds.asianHandicap.slice(0, 2).map(({ home, away }, i) => (
+                          <p key={i} className="font-medium text-white">
+                            {home.line >= 0 ? "+" : ""}{home.line} @ {home.odds.toFixed(2)} / {away.odds.toFixed(2)}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-[var(--muted)]">–</p>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-[var(--muted)]">
+                  {formatDate(featuredMatch.utcDate)}
+                </p>
+              </div>
+            </section>
+          );
+        })()}
+
         {/* Settings - glass card */}
         <section className="glass-card mb-6 p-5">
           <h2 className="mb-4 text-lg font-semibold text-white">Innstillinger</h2>
@@ -676,6 +816,14 @@ export default function DashboardPage() {
   );
 }
 
+function getBetTypeLabel(bet: { market: string; selection: string }): string {
+  if (bet.selection.includes("Kamp 1") || (bet.selection.includes(" · ") && bet.selection.includes("Kamp"))) return "Akkumulator";
+  if (bet.market === "totals") return "Over/Under";
+  if (bet.market === "btts") return "BTTS";
+  if (bet.market === "spreads") return "Asian Handicap";
+  return "Annet";
+}
+
 function ResultsTab({
   weekSummaries,
   onUpdate,
@@ -688,9 +836,44 @@ function ResultsTab({
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
   const [showAddBet, setShowAddBet] = useState(false);
   const [newBet, setNewBet] = useState({ matchLabel: "", selection: "", odds: "", stake: "" });
+  const [undoWeekKey, setUndoWeekKey] = useState<string | null>(null);
 
-  const allTimePl = weekSummaries.reduce((s, w) => s + w.profitLoss, 0);
-  const maxAbsPl = Math.max(1, ...weekSummaries.map((w) => Math.abs(w.profitLoss)));
+  const totalInvested = weekSummaries.reduce((s, w) => s + w.totalStaked, 0);
+  const totalReturned = weekSummaries.reduce((s, w) => s + w.totalReturns, 0);
+  const netPl = totalReturned - totalInvested;
+  const roi = totalInvested > 0 ? ((netPl / totalInvested) * 100) : 0;
+  const allBetsWithResult = weekSummaries.flatMap((w) => w.bets.filter((b) => b.result != null));
+  const settledCount = allBetsWithResult.length;
+  const wonCount = allBetsWithResult.filter((b) => b.result?.won).length;
+  const winRate = settledCount > 0 ? (wonCount / settledCount) * 100 : 0;
+  const bestWeek = weekSummaries.length > 0 ? weekSummaries.reduce((a, w) => (w.profitLoss > (a?.profitLoss ?? -Infinity) ? w : a), weekSummaries[0]) : null;
+  const worstWeek = weekSummaries.length > 0 ? weekSummaries.reduce((a, w) => (w.profitLoss < (a?.profitLoss ?? Infinity) ? w : a), weekSummaries[0]) : null;
+
+  const chartData = [...weekSummaries].reverse().map((w, i) => {
+    let cumulative = 0;
+    for (let j = 0; j <= i; j++) cumulative += weekSummaries[weekSummaries.length - 1 - j].profitLoss;
+    return {
+      name: `Uke ${w.weekKey.split("-")[1]?.replace("W", "") ?? w.weekKey}`,
+      weekKey: w.weekKey,
+      profitLoss: w.profitLoss,
+      cumulative,
+    };
+  });
+
+  const betTypeStats = (() => {
+    const byType = new Map<string, { won: number; total: number }>();
+    for (const w of weekSummaries) {
+      for (const b of w.bets) {
+        if (b.result == null) continue;
+        const type = getBetTypeLabel(b);
+        const cur = byType.get(type) ?? { won: 0, total: 0 };
+        cur.total += 1;
+        if (b.result.won) cur.won += 1;
+        byType.set(type, cur);
+      }
+    }
+    return Array.from(byType.entries()).map(([type, { won, total }]) => ({ type, won, total, rate: total > 0 ? (won / total) * 100 : 0 }));
+  })();
 
   const handleMarkResult = (betId: string, won: boolean, stake: number, odds: number) => {
     setBetResult({
@@ -719,34 +902,37 @@ function ResultsTab({
     onUpdate();
   };
 
+  const chartColorGood = "var(--value-good)";
+  const chartColorBad = "var(--value-high-risk)";
+
   return (
     <section className="glass-card p-5">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-lg font-semibold text-white">Resultater</h2>
+        <h2 className="text-xl font-semibold text-white">Resultater</h2>
         <button
           type="button"
           onClick={() => setShowAddBet((v) => !v)}
-          className="rounded-xl border border-[var(--card-border)] bg-white/5 px-4 py-2 text-sm font-medium text-white hover:bg-white/10 transition"
+          className="rounded-xl border border-[var(--card-border)] bg-white/5 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/10 transition"
         >
           {showAddBet ? "Avbryt" : "Legg til spill"}
         </button>
       </div>
 
       {showAddBet && (
-        <div className="mb-6 rounded-xl border border-[var(--card-border)] bg-[var(--bg)]/80 p-4">
-          <h3 className="mb-3 text-sm font-medium text-white">Nytt spill (ukesnøkkel: {getCurrentWeekKey()})</h3>
+        <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--glass)] p-5 backdrop-blur-sm">
+          <h3 className="mb-3 text-sm font-medium text-white">Nytt spill (uke {getCurrentWeekKey().split("-")[1]})</h3>
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               placeholder="Kamp (f.eks. Liverpool v Chelsea)"
               value={newBet.matchLabel}
               onChange={(e) => setNewBet((b) => ({ ...b, matchLabel: e.target.value }))}
-              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
+              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
             />
             <input
               placeholder="Valg (f.eks. Over 2.5 mål)"
               value={newBet.selection}
               onChange={(e) => setNewBet((b) => ({ ...b, selection: e.target.value }))}
-              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
+              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
             />
             <input
               type="number"
@@ -754,7 +940,7 @@ function ResultsTab({
               placeholder="Odds"
               value={newBet.odds}
               onChange={(e) => setNewBet((b) => ({ ...b, odds: e.target.value }))}
-              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
+              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
             />
             <input
               type="number"
@@ -762,110 +948,233 @@ function ResultsTab({
               placeholder="Innsats (NOK)"
               value={newBet.stake}
               onChange={(e) => setNewBet((b) => ({ ...b, stake: e.target.value }))}
-              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
+              className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-white placeholder-[var(--muted)] focus:border-[#14b8a6] focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/30"
             />
           </div>
-          <button
-            type="button"
-            onClick={handleAddBet}
-            className="mt-3 rounded-xl bg-gradient-to-r from-[#14b8a6] to-[#06b6d4] px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-90 transition"
-          >
+          <button type="button" onClick={handleAddBet} className="mt-3 rounded-xl bg-gradient-to-r from-[#14b8a6] to-[#06b6d4] px-4 py-2.5 text-sm font-semibold text-white shadow-lg hover:opacity-90 transition">
             Legg til
           </button>
         </div>
       )}
 
-      {/* All-time + Chart */}
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 rounded-xl border border-[var(--card-border)] bg-[var(--glass)] p-4 backdrop-blur-sm">
-        <div>
-          <span className="text-sm text-[var(--muted)]">Total resultat (alle uker)</span>
-          <p className={`text-2xl font-bold ${allTimePl >= 0 ? "text-[var(--value-good)]" : "text-[var(--value-high-risk)]"}`}>
-            {allTimePl >= 0 ? "+" : ""}{formatNok(allTimePl)}
-          </p>
-        </div>
-        {weekSummaries.length > 0 && (
-          <div className="flex items-end gap-1">
-            {[...weekSummaries].reverse().slice(0, 12).map((w) => {
-              const h = Math.max(2, (Math.abs(w.profitLoss) / maxAbsPl) * 80);
-              return (
-                <div key={w.weekKey} className="flex flex-col items-center gap-1" title={`${w.weekKey}: ${formatNok(w.profitLoss)}`}>
-                  <div
-                    className={`w-6 min-h-[2px] rounded-t ${w.profitLoss >= 0 ? "bg-[var(--value-good)]" : "bg-[var(--value-high-risk)]"}`}
-                    style={{ height: `${h}px` }}
-                  />
-                  <span className="text-[10px] text-[var(--muted)]">{w.weekKey.split("-")[1]}</span>
-                </div>
-              );
-            })}
+      {/* Overview stats */}
+      <div className="mb-8 rounded-2xl border border-[var(--card-border)] bg-[var(--bg)]/40 p-5 backdrop-blur-sm">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">Oversikt</h3>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          <div>
+            <p className="text-xs text-[var(--muted)]">Total innsats</p>
+            <p className="text-lg font-bold text-white">{formatNok(totalInvested)}</p>
           </div>
+          <div>
+            <p className="text-xs text-[var(--muted)]">Total retur</p>
+            <p className="text-lg font-bold text-white">{formatNok(totalReturned)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-[var(--muted)]">Netto resultat</p>
+            <p className={`text-lg font-bold ${netPl >= 0 ? "text-[var(--value-good)]" : "text-[var(--value-high-risk)]"}`}>
+              {netPl >= 0 ? "+" : ""}{formatNok(netPl)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-[var(--muted)]">ROI</p>
+            <p className={`text-lg font-bold ${roi >= 0 ? "text-[var(--value-good)]" : "text-[var(--value-high-risk)]"}`}>
+              {roi >= 0 ? "+" : ""}{roi.toFixed(1)}%
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-[var(--muted)]">Seierrate</p>
+            <p className="text-lg font-bold text-white">{settledCount > 0 ? `${winRate.toFixed(0)}%` : "–"}</p>
+            <p className="text-xs text-[var(--muted)]">{wonCount}/{settledCount} spill</p>
+          </div>
+          <div className="col-span-2 sm:col-span-1">
+            <p className="text-xs text-[var(--muted)]">Beste / verste uke</p>
+            <p className="text-sm font-medium text-[var(--value-good)]">
+              {bestWeek ? `${bestWeek.weekKey}: ${bestWeek.profitLoss >= 0 ? "+" : ""}${formatNok(bestWeek.profitLoss)}` : "–"}
+            </p>
+            <p className="text-sm font-medium text-[var(--value-high-risk)]">
+              {worstWeek ? `${worstWeek.weekKey}: ${worstWeek.profitLoss >= 0 ? "+" : ""}${formatNok(worstWeek.profitLoss)}` : "–"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts */}
+      {chartData.length > 0 && (
+        <div className="mb-8 rounded-2xl border border-[var(--card-border)] bg-[var(--bg)]/40 p-5 backdrop-blur-sm">
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">Diagrammer</h3>
+          <div className="grid gap-8 lg:grid-cols-2">
+            <div>
+              <p className="mb-2 text-xs text-[var(--muted)]">Resultat per uke</p>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" />
+                    <XAxis dataKey="name" tick={{ fill: "var(--muted)", fontSize: 11 }} />
+                    <YAxis tick={{ fill: "var(--muted)", fontSize: 11 }} tickFormatter={(v) => `${v} kr`} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--card-border)", borderRadius: "12px" }}
+                      labelStyle={{ color: "var(--fg)" }}
+                      formatter={(value: number) => [formatNok(value), "Resultat"]}
+                      labelFormatter={(_, payload) => payload[0]?.payload?.weekKey ?? ""}
+                    />
+                    <Bar dataKey="profitLoss" name="Resultat" radius={[4, 4, 0, 0]}>
+                      {chartData.map((entry, i) => (
+                        <Cell key={i} fill={entry.profitLoss >= 0 ? chartColorGood : chartColorBad} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs text-[var(--muted)]">Kumulativt resultat</p>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" />
+                    <XAxis dataKey="name" tick={{ fill: "var(--muted)", fontSize: 11 }} />
+                    <YAxis tick={{ fill: "var(--muted)", fontSize: 11 }} tickFormatter={(v) => `${v} kr`} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--card-border)", borderRadius: "12px" }}
+                      formatter={(value: number) => [formatNok(value), "Kumulativt"]}
+                    />
+                    <Line type="monotone" dataKey="cumulative" stroke="#14b8a6" strokeWidth={2} dot={{ fill: "#14b8a6", r: 3 }} name="Kumulativt" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bet type analysis */}
+      {betTypeStats.length > 0 && (
+        <div className="mb-8 rounded-2xl border border-[var(--card-border)] bg-[var(--bg)]/40 p-5 backdrop-blur-sm">
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">Resultat per markedstype</h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {betTypeStats.map(({ type, won, total, rate }) => (
+              <div key={type} className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)]/60 p-4">
+                <p className="text-sm font-medium text-white">{type}</p>
+                <p className="mt-1 text-2xl font-bold text-white">{rate.toFixed(0)}%</p>
+                <p className="text-xs text-[var(--muted)]">Seierrate · {won}/{total} spill</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-[var(--muted)]">Liga er ikke sporbart (ingen ligadata per spill).</p>
+        </div>
+      )}
+
+      {/* Weekly breakdown */}
+      <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--bg)]/40 p-5 backdrop-blur-sm">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">Ukentlig oversikt</h3>
+        {weekSummaries.length === 0 ? (
+          <p className="py-8 text-center text-sm text-[var(--muted)]">
+            Ingen uker med spill ennå. Bruk «Legg til spill» eller bekreft en spilleplan for å registrere.
+          </p>
+        ) : (
+          <ul className="space-y-4">
+            {weekSummaries.map((w, index) => (
+              <li key={w.weekKey} className="rounded-xl border border-[var(--card-border)] bg-[var(--bg)]/40 overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedWeek((k) => (k === w.weekKey ? null : w.weekKey))}
+                    className="flex flex-1 flex-wrap items-center justify-between gap-2 text-left hover:bg-white/[0.03] transition rounded -m-2 p-2"
+                  >
+                    <span className="font-medium text-white">
+                      Uke {w.weekKey.split("-")[1]?.replace("W", "") ?? w.weekKey} ({w.startDate} – {w.endDate})
+                    </span>
+                    <span className="text-[var(--muted)] text-sm">
+                      Innsats {formatNok(w.totalStaked)} · Retur {formatNok(w.totalReturns)}
+                    </span>
+                    <span className={w.profitLoss >= 0 ? "text-[var(--value-good)] font-semibold" : "text-[var(--value-high-risk)] font-semibold"}>
+                      {w.profitLoss >= 0 ? "+" : ""}{formatNok(w.profitLoss)}
+                    </span>
+                    <span className="text-[var(--muted)] text-sm">{expandedWeek === w.weekKey ? "▼" : "▶"}</span>
+                  </button>
+                  {index === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setUndoWeekKey(w.weekKey)}
+                      className="shrink-0 rounded-lg border border-[var(--value-high-risk)]/50 bg-[var(--value-high-risk)]/10 px-3 py-1.5 text-xs font-medium text-[var(--value-high-risk)] hover:bg-[var(--value-high-risk)]/20 transition"
+                    >
+                      Angre bekreftelse
+                    </button>
+                  )}
+                </div>
+                {expandedWeek === w.weekKey && (
+                  <ul className="border-t border-[var(--card-border)] px-4 py-3 space-y-3">
+                    {w.bets.map((b) => {
+                      const potentialReturn = Math.round(b.stake * b.odds * 100) / 100;
+                      return (
+                        <li key={b.id} className="rounded-lg border border-[var(--card-border)] bg-[var(--bg)]/80 p-3 text-sm">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-white">{b.matchLabel}</p>
+                              <p className="text-[var(--muted)]">{b.selection}</p>
+                              <p className="mt-1 text-xs text-[var(--muted)]">
+                                Odds {b.odds.toFixed(2)} · Innsats {formatNok(b.stake)} · Mulig retur {formatNok(potentialReturn)}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {b.result != null ? (
+                                <span className={b.result.won ? "text-[var(--value-good)] font-medium" : "text-[var(--value-high-risk)] font-medium"}>
+                                  {b.result.won ? "✅ Vunnet" : "❌ Tapt"} · {formatNok(b.result.returns)}
+                                </span>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkResult(b.id, true, b.stake, b.odds)}
+                                    className="rounded-lg bg-[var(--value-good)]/20 px-3 py-1.5 text-xs font-medium text-[var(--value-good)] hover:bg-[var(--value-good)]/30 transition"
+                                  >
+                                    ✅ Vunnet
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkResult(b.id, false, b.stake, b.odds)}
+                                    className="rounded-lg bg-[var(--value-high-risk)]/20 px-3 py-1.5 text-xs font-medium text-[var(--value-high-risk)] hover:bg-[var(--value-high-risk)]/30 transition"
+                                  >
+                                    ❌ Tapt
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
-      <p className="mb-4 text-xs text-[var(--muted)]">Stolpediagram: resultat per uke (grønn = gevinst, rød = tap).</p>
 
-      {/* Week list */}
-      {weekSummaries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-[var(--muted)]">
-          Ingen uker med spill ennå. Bruk «Legg til spill» for å registrere et spill (tilknyttes nåværende uke).
-        </p>
-      ) : (
-        <ul className="space-y-3">
-          {weekSummaries.map((w) => (
-            <li key={w.weekKey} className="rounded-xl border border-[var(--card-border)] bg-[var(--glass)] overflow-hidden backdrop-blur-sm">
+      {undoWeekKey != null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setUndoWeekKey(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-[var(--card-border)] bg-[var(--card)] p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-2 text-lg font-semibold text-white">Angre bekreftelse</h3>
+            <p className="mb-4 text-sm text-[var(--fg)]">Er du sikker? Dette vil fjerne uken fra resultater.</p>
+            <div className="flex gap-3 justify-end">
+              <button type="button" onClick={() => setUndoWeekKey(null)} className="rounded-xl border border-[var(--card-border)] bg-white/5 px-4 py-2 text-sm font-medium text-white hover:bg-white/10 transition">
+                Avbryt
+              </button>
               <button
                 type="button"
-                onClick={() => setExpandedWeek((k) => (k === w.weekKey ? null : w.weekKey))}
-                className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left hover:bg-white/[0.03] transition"
+                onClick={() => {
+                  removeWeekFromResults(undoWeekKey);
+                  setUndoWeekKey(null);
+                  onUpdate();
+                }}
+                className="rounded-xl bg-[var(--value-high-risk)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition"
               >
-                <span className="font-medium text-white">
-                  Uke {w.weekKey.split("-")[1]?.replace("W", "") ?? w.weekKey} ({w.startDate} – {w.endDate})
-                </span>
-                <span className="text-[var(--muted)] text-sm">
-                  Innsats: {formatNok(w.totalStaked)} · Retur: {formatNok(w.totalReturns)}
-                </span>
-                <span className={w.profitLoss >= 0 ? "text-[var(--value-good)] font-semibold" : "text-[var(--value-high-risk)] font-semibold"}>
-                  {w.profitLoss >= 0 ? "+" : ""}{formatNok(w.profitLoss)}
-                </span>
-                <span className="text-[var(--muted)] text-sm">{expandedWeek === w.weekKey ? "▼" : "▶"}</span>
+                Bekreft
               </button>
-              {expandedWeek === w.weekKey && (
-                <ul className="border-t border-[var(--card-border)] px-4 py-3 space-y-2">
-                  {w.bets.map((b) => (
-                    <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--card-border)] bg-[var(--bg)]/80 p-3 text-sm">
-                      <div>
-                        <p className="font-medium text-white">{b.matchLabel}</p>
-                        <p className="text-[var(--muted)]">{b.selection} @ <span className="font-bold text-white">{b.odds.toFixed(2)}</span> · {formatNok(b.stake)}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {b.result != null ? (
-                          <span className={b.result.won ? "text-[var(--value-good)] font-medium" : "text-[var(--value-high-risk)] font-medium"}>
-                            {b.result.won ? "Vunnet" : "Tapt"} · {formatNok(b.result.returns)}
-                          </span>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleMarkResult(b.id, true, b.stake, b.odds)}
-                              className="rounded-lg bg-[var(--value-good)]/20 px-2 py-1 text-xs font-medium text-[var(--value-good)] hover:bg-[var(--value-good)]/30 transition"
-                            >
-                              Vunnet ✅
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleMarkResult(b.id, false, b.stake, b.odds)}
-                              className="rounded-lg bg-[var(--value-high-risk)]/20 px-2 py-1 text-xs font-medium text-[var(--value-high-risk)] hover:bg-[var(--value-high-risk)]/30 transition"
-                            >
-                              Tapt ❌
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
-        </ul>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   );

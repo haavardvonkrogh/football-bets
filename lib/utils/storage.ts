@@ -149,6 +149,15 @@ export function confirmWeeklyPlan(plan: WeeklyBettingPlan): void {
   }
 }
 
+/** Remove a week from results: delete all bets with that weekKey and their results. Use for "Angre bekreftelse". */
+export function removeWeekFromResults(weekKey: string): void {
+  const bets = getStoredBets();
+  const removedIds = new Set(bets.filter((b) => b.weekKey === weekKey).map((b) => b.id));
+  setStoredBets(bets.filter((b) => b.weekKey !== weekKey));
+  const results = getStoredResults();
+  setStoredResults(results.filter((r) => !removedIds.has(r.betId)));
+}
+
 /** Build week summaries from bets + results for P/L tracker */
 export function getWeekSummaries(): WeekSummary[] {
   const bets = getStoredBets();
