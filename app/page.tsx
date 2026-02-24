@@ -166,6 +166,7 @@ export default function DashboardPage() {
         potentialReturnNok: Math.round(stake * rec.odds * 100) / 100,
         reason: next.plannedBets[betIndex].reason,
         valueScore: rec.valueScore,
+        confidenceScore: rec.confidenceScore,
       };
       next.totalStaked = next.plannedBets.reduce((s, b) => s + b.stakeNok, 0);
       next.totalPotentialReturn = next.plannedBets.reduce((s, b) => s + b.potentialReturnNok, 0);
@@ -187,6 +188,7 @@ export default function DashboardPage() {
         bet.selection = bet.legs.map((l, i) => `Leg ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · ");
         bet.matchLabel = bet.legs.map((l) => l.matchLabel).join(" · ");
         bet.valueScore = Math.min(...bet.legs.map((l) => l.valueScore));
+        bet.confidenceScore = Math.min(...bet.legs.map((l) => l.confidenceScore));
       }
       next.totalPotentialReturn = next.plannedBets.reduce((s, b) => s + b.potentialReturnNok, 0);
       return next;
@@ -208,6 +210,7 @@ export default function DashboardPage() {
       bet.selection = bet.legs!.map((l, i) => `Leg ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · ");
       bet.matchLabel = bet.legs!.map((l) => l.matchLabel).join(" · ");
       bet.valueScore = bet.legs!.length ? Math.min(...bet.legs!.map((l) => l.valueScore)) : undefined;
+      bet.confidenceScore = bet.legs!.length ? Math.min(...bet.legs!.map((l) => l.confidenceScore)) : undefined;
       next.totalPotentialReturn = next.plannedBets.reduce((s, b) => s + b.potentialReturnNok, 0);
       return next;
     });
@@ -229,6 +232,7 @@ export default function DashboardPage() {
       bet.selection = bet.legs!.map((l, i) => `Leg ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · ");
       bet.matchLabel = bet.legs!.map((l) => l.matchLabel).join(" · ");
       bet.valueScore = Math.min(...bet.legs!.map((l) => l.valueScore));
+      bet.confidenceScore = Math.min(...bet.legs!.map((l) => l.confidenceScore));
       next.totalPotentialReturn = next.plannedBets.reduce((s, b) => s + b.potentialReturnNok, 0);
       return next;
     });
@@ -485,6 +489,7 @@ export default function DashboardPage() {
                       <span className="font-medium text-white">{rec.matchLabel}</span>
                       <div className="flex flex-wrap items-center gap-2">
                         <ValueScoreBadgeWithTooltip score={rec.valueScore} />
+                        <ConfidenceBadgeWithTooltip score={rec.confidenceScore} />
                         <span className="text-sm font-medium text-[#14b8a6]">{rec.league}</span>
                         <Link
                           href={`/match/${rec.matchId}`}
@@ -561,6 +566,9 @@ export default function DashboardPage() {
                         </span>
                         {bet.valueScore != null && (
                           <ValueScoreBadgeWithTooltip score={bet.valueScore} />
+                        )}
+                        {bet.confidenceScore != null && (
+                          <ConfidenceBadgeWithTooltip score={bet.confidenceScore} />
                         )}
                       </div>
                       <span className={`text-2xl font-bold tabular-nums ${valueColor(bet.odds)}`}>
@@ -949,10 +957,19 @@ function valueColor(odds: number) {
 const VALUE_SCORE_TOOLTIP =
   "Verdiscore viser hvor godt oddsen er sammenlignet med vår estimerte sannsynlighet. 7–10 = god verdi (bookmaker undervurderer). Under 4 = dårlig verdi.";
 
+const CONFIDENCE_TOOLTIP =
+  "Konfidensscoren viser hvor sannsynlig vi mener det er at dette bettet vinner, basert på form, hjemmebane-fordel og historiske trender.";
+
 function valueScoreBadge(score: number): { label: string; className: string } {
   if (score >= 7) return { label: `Verdi: ${score}/10 🟢`, className: "text-[var(--value-good)]" };
   if (score >= 4) return { label: `Verdi: ${score}/10 🟡`, className: "text-[var(--value-medium)]" };
   return { label: `Verdi: ${score}/10 🔴`, className: "text-[var(--value-high-risk)]" };
+}
+
+function confidenceBadge(score: number): { label: string; className: string } {
+  if (score >= 70) return { label: `Konfidens: ${score}%`, className: "text-[var(--value-good)]" };
+  if (score >= 50) return { label: `Konfidens: ${score}%`, className: "text-[var(--value-medium)]" };
+  return { label: `Konfidens: ${score}%`, className: "text-[var(--value-high-risk)]" };
 }
 
 function ValueScoreBadgeWithTooltip({ score }: { score: number }) {
@@ -965,6 +982,21 @@ function ValueScoreBadgeWithTooltip({ score }: { score: number }) {
         role="tooltip"
       >
         {VALUE_SCORE_TOOLTIP}
+      </span>
+    </span>
+  );
+}
+
+function ConfidenceBadgeWithTooltip({ score }: { score: number }) {
+  const { label, className } = confidenceBadge(score);
+  return (
+    <span className="group relative inline-block">
+      <span className={`cursor-help text-xs font-semibold ${className}`}>{label}</span>
+      <span
+        className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 w-56 -translate-x-1/2 rounded-lg border border-[var(--card-border)] bg-[var(--card)] px-2.5 py-2 text-xs text-[var(--fg)] opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100"
+        role="tooltip"
+      >
+        {CONFIDENCE_TOOLTIP}
       </span>
     </span>
   );

@@ -208,6 +208,8 @@ export interface BetRecommendation {
   handicapLine?: number;
   /** Value bet score 1–10 (5+ = value bet). Based on (our est. prob - implied prob) / implied prob * 10. */
   valueScore: number;
+  /** Confidence 0–100: how likely we think this bet is to win (form, home/away, trends). */
+  confidenceScore: number;
 }
 
 /** A single planned bet (single or accumulator) in the weekly plan */
@@ -230,6 +232,8 @@ export interface PlannedBet {
   matchLabel?: string;
   /** Value bet score 1–10 (for sorting: highest first). */
   valueScore?: number;
+  /** Confidence 0–100 for single; for accumulator = min of legs. */
+  confidenceScore?: number;
 }
 
 export interface WeeklyBettingPlan {

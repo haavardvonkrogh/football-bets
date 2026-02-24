@@ -6,7 +6,8 @@ import { useParams } from "next/navigation";
 import type { FootballDataMatch } from "@/lib/types";
 import type { ResponseOdds } from "@/lib/types";
 import type { StandingTableEntry } from "@/lib/types";
-import { getStoredMatches } from "@/lib/utils/storage";
+import { getStoredMatches, getStoredSettings } from "@/lib/utils/storage";
+import { getRecommendations } from "@/lib/utils/recommendations";
 import {
   getLast5Summary,
   formatLast5Results,
@@ -70,6 +71,10 @@ export default function MatchPreviewPage() {
   const [odds, setOdds] = useState<ResponseOdds | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [aiAgreesWithRecommendation, setAiAgreesWithRecommendation] = useState<boolean | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     const id = params?.id;
@@ -103,6 +108,88 @@ export default function MatchPreviewPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const CACHE_KEY_PREFIX = "ai-analysis:";
+  const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+
+  const loadAiAnalysis = useCallback(async () => {
+    if (matchId == null || !data?.match) return;
+    const cacheKey = `${CACHE_KEY_PREFIX}${matchId}`;
+    try {
+      const cached = typeof localStorage !== "undefined" ? localStorage.getItem(cacheKey) : null;
+      if (cached) {
+        const parsed = JSON.parse(cached) as {
+          text: string;
+          fetchedAt: number;
+          agreesWithRecommendation?: boolean;
+        };
+        if (Date.now() - parsed.fetchedAt < CACHE_TTL_MS) {
+          setAiAnalysis(parsed.text);
+          setAiAgreesWithRecommendation(parsed.agreesWithRecommendation ?? true);
+          setAiError(null);
+          return;
+        }
+      }
+      setAiLoading(true);
+      setAiError(null);
+      const storedMatches = getStoredMatches();
+      const settings = getStoredSettings();
+      const allRecs = getRecommendations(storedMatches, settings.riskProfile);
+      const matchRecs = allRecs.filter((r) => r.matchId === matchId).map((r) => ({
+        market: r.market,
+        selection: r.selection,
+        odds: r.odds,
+        valueScore: r.valueScore,
+        confidenceScore: r.confidenceScore,
+      }));
+      const res = await fetch(`/api/match/${matchId}/analysis`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          match: {
+            homeTeam: data.match.homeTeam,
+            awayTeam: data.match.awayTeam,
+            competition: data.match.competition,
+            utcDate: data.match.utcDate,
+          },
+          odds: odds ?? undefined,
+          recommendations: matchRecs.length ? matchRecs : undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || `HTTP ${res.status}`);
+      }
+      const json = (await res.json()) as {
+        analysis: string;
+        agreesWithRecommendation?: boolean;
+      };
+      setAiAnalysis(json.analysis);
+      setAiAgreesWithRecommendation(json.agreesWithRecommendation ?? true);
+      setAiError(null);
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            text: json.analysis,
+            fetchedAt: Date.now(),
+            agreesWithRecommendation: json.agreesWithRecommendation ?? true,
+          })
+        );
+      }
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "Kunne ikke laste AI-analyse");
+      setAiAnalysis(null);
+    } finally {
+      setAiLoading(false);
+    }
+  }, [matchId, data?.match, odds]);
+
+  useEffect(() => {
+    if (data?.match && !aiLoading && aiAnalysis === null && aiError === null) {
+      loadAiAnalysis();
+    }
+  }, [data?.match, aiLoading, aiAnalysis, aiError, loadAiAnalysis]);
 
   if (loading && !data) {
     return (
@@ -303,10 +390,64 @@ export default function MatchPreviewPage() {
         </section>
 
         {/* 4. Bet analysis */}
-        <section className="glass-card p-5">
+        <section className="glass-card mb-6 p-5">
           <h2 className="mb-4 text-lg font-semibold text-white">Spillanalyse</h2>
           <div className="prose prose-invert max-w-none text-[var(--fg)]">
             {renderAnalysisText(analysisText)}
+          </div>
+        </section>
+
+        {/* 5. AI-analyse */}
+        <section className="relative rounded-2xl p-[2px] bg-gradient-to-br from-[#8b5cf6] via-[#6366f1] to-[#06b6d4] shadow-[0_0_24px_-8px_rgba(139,92,246,0.4)]">
+          <div className="relative overflow-hidden rounded-[14px] bg-[var(--glass)] p-5 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-gradient-to-br from-[#8b5cf6]/5 via-transparent to-[#06b6d4]/5 pointer-events-none" />
+            <div className="relative">
+            <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-gradient-to-br from-[#8b5cf6] to-[#06b6d4] text-xs font-bold text-white">
+                AI
+              </span>
+              AI-analyse
+            </h2>
+            {aiLoading && (
+              <div className="flex flex-col items-center justify-center gap-3 py-10 text-[var(--muted)]">
+                <svg
+                  className="h-10 w-10 animate-spin text-[#8b5cf6]"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                <p className="text-sm">Genererer AI-analyse…</p>
+              </div>
+            )}
+            {!aiLoading && aiError && (
+              <p className="py-4 text-sm text-[var(--value-high-risk)]">{aiError}</p>
+            )}
+            {!aiLoading && aiAnalysis && aiAgreesWithRecommendation === false && (
+              <div className="mb-4 rounded-xl border border-[var(--value-high-risk)]/50 bg-[var(--value-high-risk)]/10 px-4 py-3 text-sm text-[var(--value-high-risk)]">
+                ⚠️ AI-analysen er uenig med vår anbefaling — les analysen nøye før du spiller
+              </div>
+            )}
+            {!aiLoading && aiAnalysis && (
+              <div className="prose prose-invert max-w-none text-[var(--fg)]">
+                {renderAnalysisText(aiAnalysis)}
+              </div>
+            )}
+            </div>
           </div>
         </section>
       </main>

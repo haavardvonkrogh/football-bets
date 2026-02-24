@@ -17,14 +17,51 @@ function computeValueScore(odds: number, matchId: number, market: string, select
   return Math.max(1, Math.min(10, Math.round(raw)));
 }
 
+/**
+ * Confidence = how likely we think this bet is to win (0–100).
+ * Base 50%, then adjust: implied prob (market), home/away, pseudo form, O/U or BTTS trend.
+ * When form/h2h/trends are available from API, replace hash-based terms.
+ */
+function computeConfidence(
+  odds: number,
+  matchId: number,
+  market: string,
+  selection: string,
+  homeAdvantageDelta: number
+): number {
+  const impliedPct = (1 / odds) * 100;
+  const marketAnchor = 50 + (impliedPct - 50) * 0.45;
+  const formHash = (matchId * 13 + selection.length * 7) % 11; // 0–10
+  const formDelta = formHash - 5;
+  let trendDelta = 0;
+  if (market === "totals") {
+    const trendHash = (matchId * 17 + market.length) % 7;
+    trendDelta = trendHash - 3;
+  } else if (market === "btts") {
+    const trendHash = (matchId * 19 + selection.length) % 7;
+    trendDelta = trendHash - 3;
+  }
+  const raw =
+    marketAnchor + homeAdvantageDelta + formDelta + trendDelta;
+  return Math.max(0, Math.min(100, Math.round(raw)));
+}
+
 function addRec(
   out: BetRecommendation[],
-  rec: Omit<BetRecommendation, "valueScore">,
-  odds: number
+  rec: Omit<BetRecommendation, "valueScore" | "confidenceScore">,
+  odds: number,
+  homeAdvantageDelta: number
 ): void {
   const valueScore = computeValueScore(odds, rec.matchId, rec.market, rec.selection);
   if (valueScore < MIN_VALUE_SCORE) return;
-  out.push({ ...rec, valueScore });
+  const confidenceScore = computeConfidence(
+    odds,
+    rec.matchId,
+    rec.market,
+    rec.selection,
+    homeAdvantageDelta
+  );
+  out.push({ ...rec, valueScore, confidenceScore });
 }
 
 /**
@@ -49,26 +86,36 @@ export function getRecommendations(
     for (const row of overUnder) {
       const { line: point, over, under } = row;
       if (over != null && over >= minOdds && over <= maxOdds) {
-        addRec(out, {
-          matchId: match.id,
-          matchLabel: label,
-          league,
-          market: "totals",
-          selection: `Over ${point} mål`,
-          odds: over,
-          reason: `Oddsen for Over ${point} mål (${over.toFixed(2)}) gir en god balanse mellom risiko og avkastning. Begge lag har godt angrepspotensial, og linjen kan representere god verdi.`,
-        }, over);
+        addRec(
+          out,
+          {
+            matchId: match.id,
+            matchLabel: label,
+            league,
+            market: "totals",
+            selection: `Over ${point} mål`,
+            odds: over,
+            reason: `Oddsen for Over ${point} mål (${over.toFixed(2)}) gir en god balanse mellom risiko og avkastning. Begge lag har godt angrepspotensial, og linjen kan representere god verdi.`,
+          },
+          over,
+          1
+        );
       }
       if (under != null && under >= minOdds && under <= maxOdds) {
-        addRec(out, {
-          matchId: match.id,
-          matchLabel: label,
-          league,
-          market: "totals",
-          selection: `Under ${point} mål`,
-          odds: under,
-          reason: `Under ${point} mål til odds ${under.toFixed(2)} er et solid defensivt valg. Hvis ett eller begge lag spiller forsiktig eller mangler sentrale angripere, kan oddsen representere god verdi.`,
-        }, under);
+        addRec(
+          out,
+          {
+            matchId: match.id,
+            matchLabel: label,
+            league,
+            market: "totals",
+            selection: `Under ${point} mål`,
+            odds: under,
+            reason: `Under ${point} mål til odds ${under.toFixed(2)} er et solid defensivt valg. Hvis ett eller begge lag spiller forsiktig eller mangler sentrale angripere, kan oddsen representere god verdi.`,
+          },
+          under,
+          1
+        );
       }
     }
 
@@ -83,16 +130,22 @@ export function getRecommendations(
         const underdogName = point < 0 ? awayName : homeName;
         if (underdogOdds >= minOdds && underdogOdds <= maxOdds) {
           const lineDesc = point > 0 ? `+${point}` : String(point);
-          addRec(out, {
-            matchId: match.id,
-            matchLabel: label,
-            league,
-            market: "spreads",
-            selection: `${underdogName} ${lineDesc}`,
-            odds: underdogOdds,
-            handicapLine: point,
-            reason: `Asian handicap ${lineDesc} på ${underdogName} betyr at de starter med ${point > 0 ? "målfordel" : "målunderlag"} for spillformålet. Til odds ${underdogOdds.toFixed(2)} får underdogen en linje som jevner ut – hvis du tror de holder kampen jevn eller vinner, kan dette gi verdi.`,
-          }, underdogOdds);
+          const isUnderdogHome = underdogName === (match.homeTeam.shortName ?? match.homeTeam.name);
+          addRec(
+            out,
+            {
+              matchId: match.id,
+              matchLabel: label,
+              league,
+              market: "spreads",
+              selection: `${underdogName} ${lineDesc}`,
+              odds: underdogOdds,
+              handicapLine: point,
+              reason: `Asian handicap ${lineDesc} på ${underdogName} betyr at de starter med ${point > 0 ? "målfordel" : "målunderlag"} for spillformålet. Til odds ${underdogOdds.toFixed(2)} får underdogen en linje som jevner ut – hvis du tror de holder kampen jevn eller vinner, kan dette gi verdi.`,
+            },
+            underdogOdds,
+            isUnderdogHome ? 3 : -2
+          );
         }
       }
     }
@@ -101,26 +154,36 @@ export function getRecommendations(
     if (btts) {
       const { yes, no } = btts;
       if (yes != null && yes >= minOdds && yes <= maxOdds) {
-        addRec(out, {
-          matchId: match.id,
-          matchLabel: label,
-          league,
-          market: "btts",
-          selection: "Begge lag scorer – Ja",
-          odds: yes,
-          reason: `Begge lag scorer til odds ${yes.toFixed(2)} er et sterkt valg når begge sider har god angrep og slipper inn mål. Prisen reflekterer en reell sjanse for mål i begge ender.`,
-        }, yes);
+        addRec(
+          out,
+          {
+            matchId: match.id,
+            matchLabel: label,
+            league,
+            market: "btts",
+            selection: "Begge lag scorer – Ja",
+            odds: yes,
+            reason: `Begge lag scorer til odds ${yes.toFixed(2)} er et sterkt valg når begge sider har god angrep og slipper inn mål. Prisen reflekterer en reell sjanse for mål i begge ender.`,
+          },
+          yes,
+          1
+        );
       }
       if (no != null && no >= minOdds && no <= maxOdds) {
-        addRec(out, {
-          matchId: match.id,
-          matchLabel: label,
-          league,
-          market: "btts",
-          selection: "Begge lag scorer – Nei",
-          odds: no,
-          reason: `BTTS Nei til odds ${no.toFixed(2)} passer når ett lag dominerer eller begge er defensivt solide. Hvis du forventer nullmål eller få målscorere, kan dette gi verdi.`,
-        }, no);
+        addRec(
+          out,
+          {
+            matchId: match.id,
+            matchLabel: label,
+            league,
+            market: "btts",
+            selection: "Begge lag scorer – Nei",
+            odds: no,
+            reason: `BTTS Nei til odds ${no.toFixed(2)} passer når ett lag dominerer eller begge er defensivt solide. Hvis du forventer nullmål eller få målscorere, kan dette gi verdi.`,
+          },
+          no,
+          1
+        );
       }
     }
   }

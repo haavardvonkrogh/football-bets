@@ -80,6 +80,7 @@ export function getWeeklyBettingPlan(
         potentialReturnNok: Math.round(stake * rec.odds * 100) / 100,
         reason: `Lav risiko: enkeltspill med odds 1,6–2,2. Innsats ${pctPerBet}% av budsjettet.`,
         valueScore: rec.valueScore,
+        confidenceScore: rec.confidenceScore,
       });
     }
     const normalized = sortByValueScore(normalizeStakesToBudget(plannedBets, budget));
@@ -123,6 +124,7 @@ export function getWeeklyBettingPlan(
         potentialReturnNok: Math.round(stake * rec.odds * 100) / 100,
         reason: `Enkeltspill 15–25% av budsjettet, odds 1,8–2,8. Mulig retur: ${Math.round(stake * rec.odds * 100) / 100} NOK.`,
         valueScore: rec.valueScore,
+        confidenceScore: rec.confidenceScore,
       });
     }
     if (hasAcca) {
@@ -139,6 +141,7 @@ export function getWeeklyBettingPlan(
         potentialReturnNok: Math.round(accaStakeNok * combinedOdds * 100) / 100,
         reason: `2-fold akkumulator, 20% av budsjettet. Mulig retur: ${Math.round(accaStakeNok * combinedOdds * 100) / 100} NOK.`,
         valueScore: Math.min(...accaLegs.map((l) => l.valueScore)),
+        confidenceScore: Math.min(...accaLegs.map((l) => l.confidenceScore)),
       });
     }
     const normalized = sortByValueScore(normalizeStakesToBudget(plannedBets, budget));
@@ -204,6 +207,7 @@ export function getWeeklyBettingPlan(
       potentialReturnNok: ret,
       reason: `Verdibet (odds 3,0–6,0), 25% av budsjettet. Prioriterer Over 2.5 / BTTS Ja / Asian handicap. Potensiell retur ved treff: ${ret} NOK.`,
       valueScore: rec.valueScore,
+      confidenceScore: rec.confidenceScore,
     });
   }
 
@@ -222,6 +226,7 @@ export function getWeeklyBettingPlan(
       potentialReturnNok: ret,
       reason: `3-fold (sikter kombinert odds 10–20), 15% av budsjettet. Potensiell retur ved treff: ${ret} NOK.`,
       valueScore: Math.min(...threeFoldLegs.map((l) => l.valueScore)),
+      confidenceScore: Math.min(...threeFoldLegs.map((l) => l.confidenceScore)),
     });
   }
 
@@ -240,6 +245,7 @@ export function getWeeklyBettingPlan(
       potentialReturnNok: ret,
       reason: `4-fold (sikter kombinert odds 25–50), 15% av budsjettet. Potensiell retur ved treff: ${ret} NOK.`,
       valueScore: Math.min(...fourFoldLegs.map((l) => l.valueScore)),
+      confidenceScore: Math.min(...fourFoldLegs.map((l) => l.confidenceScore)),
     });
   }
 
@@ -260,6 +266,7 @@ export function getWeeklyBettingPlan(
       potentialReturnNok: ret,
       reason: `Mega-akkumulator (${megaCount}-fold, sikter odds 60–150+), 20% av budsjettet. Potensiell retur ved treff: ${ret} NOK.`,
       valueScore: Math.min(...megaUse.map((l) => l.valueScore)),
+      confidenceScore: Math.min(...megaUse.map((l) => l.confidenceScore)),
     });
   }
 
