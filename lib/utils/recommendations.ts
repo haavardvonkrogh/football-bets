@@ -73,8 +73,8 @@ export function getRecommendations(
   riskProfile: RiskProfile
 ): BetRecommendation[] {
   const out: BetRecommendation[] = [];
-  const minOdds = riskProfile === "low" ? 1.6 : riskProfile === "medium" ? 1.8 : 2.5;
-  const maxOdds = riskProfile === "low" ? 2.2 : riskProfile === "medium" ? 2.8 : 6.0;
+  const minOdds = riskProfile === "low" ? 1.6 : riskProfile === "medium" ? 1.8 : riskProfile === "high" ? 2.0 : 2.5;
+  const maxOdds = riskProfile === "low" ? 2.2 : riskProfile === "medium" ? 2.5 : riskProfile === "high" ? 2.8 : 15;
 
   for (const match of matches) {
     const label = `${match.homeTeam.shortName ?? match.homeTeam.name} v ${match.awayTeam.shortName ?? match.awayTeam.name}`;

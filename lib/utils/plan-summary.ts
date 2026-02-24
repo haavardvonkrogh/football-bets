@@ -27,7 +27,7 @@ export function getPlanSummary(
   let confidence: ConfidenceLevel = "medium";
   if (plan.plannedBets.length >= 4 && (riskProfile === "low" || riskProfile === "medium")) {
     confidence = "high";
-  } else if (plan.plannedBets.length <= 2 || riskProfile === "high") {
+  } else if (plan.plannedBets.length <= 2 || riskProfile === "high" || riskProfile === "extreme") {
     confidence = "low";
   }
 
@@ -35,8 +35,10 @@ export function getPlanSummary(
     riskProfile === "low"
       ? "Lav risiko betyr at vi holder oss til enkeltspill med lave odds for å begrense tap."
       : riskProfile === "medium"
-        ? "Middels risiko innebærer en blanding av trygge enkeltspill og én accumulator for å øke avkastningspotensialet."
-        : "Høy risiko betyr flere accumulators og høyere odds – større mulig gevinst, men også større svingninger.";
+        ? "Middels risiko innebærer 2–3 fold akkumulatorer med moderate odds for å øke avkastningspotensialet."
+        : riskProfile === "high"
+          ? "Høy risiko betyr 3–4 fold akkumulatorer og ett enkeltspill – større mulig gevinst, større svingninger."
+          : "Ekstrem risiko betyr mega-akkumulatorer (5–6 kamper) og mindre accas – svært høy potensiell retur, svært høy risiko.";
 
   const summaryText = `Denne uken er valgene tatt ut fra oddsverdi, form og ligatrender. Vi har siktet på spill der oddsen ser gunstig ut sammenlignet med sannsynligheten vi vurderer, og tatt hensyn til ligatrender (f.eks. målrike eller defensivt innstilte lag). ${riskText} Ukens strategi er å spre innsatsen på flere spill slik at én feil ikke tar hele budsjettet, og å satse mer der vi ser best verdi.`;
 

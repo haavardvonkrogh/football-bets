@@ -455,6 +455,7 @@ export default function DashboardPage() {
                 <option value="low">Lav</option>
                 <option value="medium">Middels</option>
                 <option value="high">Høy</option>
+                <option value="extreme">Ekstrem</option>
               </select>
             </div>
           </div>
@@ -721,7 +722,14 @@ export default function DashboardPage() {
                         {bet.legs.map((leg, legIdx) => (
                           <div key={legIdx} className="flex flex-wrap items-center justify-between gap-2 rounded bg-white/5 px-2 py-1.5 text-sm">
                             <span className="text-white">Leg {legIdx + 1}: {leg.matchLabel} – {leg.selection} @ {leg.odds.toFixed(2)}</span>
-                            {planEditMode && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              {leg.valueScore != null && (
+                                <ValueScoreBadgeWithTooltip score={leg.valueScore} />
+                              )}
+                              {leg.confidenceScore != null && (
+                                <ConfidenceBadgeWithTooltip score={leg.confidenceScore} />
+                              )}
+                              {planEditMode && (
                               <div className="flex gap-1">
                                 <button type="button" onClick={() => setSwapModal({ betIndex: i, legIndex: legIdx })} className="rounded bg-[var(--card-border)] px-2 py-1 text-xs font-medium text-white hover:bg-white/20">
                                   Bytt kamp
@@ -732,7 +740,8 @@ export default function DashboardPage() {
                                   </button>
                                 )}
                               </div>
-                            )}
+                              )}
+                            </div>
                           </div>
                         ))}
                         {planEditMode && bet.legs && bet.legs.length < 6 && (

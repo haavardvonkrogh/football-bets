@@ -158,7 +158,7 @@ export interface ResponseOdds {
 
 // ---- Budget & tracking (localStorage) ----
 
-export type RiskProfile = "low" | "medium" | "high";
+export type RiskProfile = "low" | "medium" | "high" | "extreme";
 
 export interface UserSettings {
   weeklyBudget: number;
