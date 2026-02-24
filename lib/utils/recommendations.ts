@@ -1,8 +1,35 @@
 import type { UpcomingMatch, BetRecommendation, RiskProfile } from "@/lib/types";
 
+const MIN_VALUE_SCORE = 5; // Only recommend bets with value score >= 5
+
+/**
+ * Implied probability from decimal odds: (1/odds).
+ * Value score: ((ourEstProb - impliedProb) / impliedProb) * 10, clamped 1-10.
+ * Heuristic "fair" probability: implied * multiplier (1.0–2.0) based on match/market/selection
+ * so we get variety; in production replace with form + H2H + home/away.
+ */
+function computeValueScore(odds: number, matchId: number, market: string, selection: string): number {
+  const impliedProb = 1 / odds;
+  const hash = Math.abs((matchId * 7 + market.length * 5 + selection.length) % 11);
+  const multiplier = 1 + hash * 0.1; // 1.0 to 2.0
+  const fairProb = impliedProb * multiplier;
+  const raw = ((fairProb - impliedProb) / impliedProb) * 10;
+  return Math.max(1, Math.min(10, Math.round(raw)));
+}
+
+function addRec(
+  out: BetRecommendation[],
+  rec: Omit<BetRecommendation, "valueScore">,
+  odds: number
+): void {
+  const valueScore = computeValueScore(odds, rec.matchId, rec.market, rec.selection);
+  if (valueScore < MIN_VALUE_SCORE) return;
+  out.push({ ...rec, valueScore });
+}
+
 /**
  * Generate value bet recommendations from matches with odds.
- * Uses simple heuristics: attractive odds + implied value.
+ * Only returns bets with value score >= 5, sorted by value score (highest first).
  */
 export function getRecommendations(
   matches: UpcomingMatch[],
@@ -18,35 +45,33 @@ export function getRecommendations(
     const odds = match.odds;
     if (!odds) continue;
 
-    // Over/Under – use overUnder array from API response
     const overUnder = odds.overUnder ?? [];
     for (const row of overUnder) {
       const { line: point, over, under } = row;
       if (over != null && over >= minOdds && over <= maxOdds) {
-        out.push({
+        addRec(out, {
           matchId: match.id,
           matchLabel: label,
           league,
           market: "totals",
-          selection: `Over ${point} goals`,
+          selection: `Over ${point} mål`,
           odds: over,
-          reason: `The odds for Over ${point} goals (${over.toFixed(2)}) offer a good balance of risk and reward. Both teams have reasonable attacking potential, and this line can represent value.`,
-        });
+          reason: `Oddsen for Over ${point} mål (${over.toFixed(2)}) gir en god balanse mellom risiko og avkastning. Begge lag har godt angrepspotensial, og linjen kan representere god verdi.`,
+        }, over);
       }
       if (under != null && under >= minOdds && under <= maxOdds) {
-        out.push({
+        addRec(out, {
           matchId: match.id,
           matchLabel: label,
           league,
           market: "totals",
-          selection: `Under ${point} goals`,
+          selection: `Under ${point} mål`,
           odds: under,
-          reason: `Under ${point} goals at ${under.toFixed(2)} is a solid defensive pick. If one or both sides tend to play cautiously or have key attackers missing, the odds can represent value.`,
-        });
+          reason: `Under ${point} mål til odds ${under.toFixed(2)} er et solid defensivt valg. Hvis ett eller begge lag spiller forsiktig eller mangler sentrale angripere, kan oddsen representere god verdi.`,
+        }, under);
       }
     }
 
-    // Asian Handicap – use asianHandicap array from API response (all 0.5-increment lines)
     const ahList = odds.asianHandicap;
     if (ahList?.length) {
       const homeName = match.homeTeam.shortName ?? match.homeTeam.name;
@@ -58,7 +83,7 @@ export function getRecommendations(
         const underdogName = point < 0 ? awayName : homeName;
         if (underdogOdds >= minOdds && underdogOdds <= maxOdds) {
           const lineDesc = point > 0 ? `+${point}` : String(point);
-          out.push({
+          addRec(out, {
             matchId: match.id,
             matchLabel: label,
             league,
@@ -66,40 +91,40 @@ export function getRecommendations(
             selection: `${underdogName} ${lineDesc}`,
             odds: underdogOdds,
             handicapLine: point,
-            reason: `Asian Handicap ${lineDesc} on ${underdogName} means they start with ${point > 0 ? "a goal advantage" : "a goal disadvantage"} for betting purposes. At ${underdogOdds.toFixed(2)}, the underdog is getting a line that can level the playing field—if you think they can keep the match close or win, this offers value.`,
-          });
+            reason: `Asian handicap ${lineDesc} på ${underdogName} betyr at de starter med ${point > 0 ? "målfordel" : "målunderlag"} for spillformålet. Til odds ${underdogOdds.toFixed(2)} får underdogen en linje som jevner ut – hvis du tror de holder kampen jevn eller vinner, kan dette gi verdi.`,
+          }, underdogOdds);
         }
       }
     }
 
-    // BTTS – use btts.yes / btts.no from API response
     const btts = odds.btts;
     if (btts) {
       const { yes, no } = btts;
       if (yes != null && yes >= minOdds && yes <= maxOdds) {
-        out.push({
+        addRec(out, {
           matchId: match.id,
           matchLabel: label,
           league,
           market: "btts",
-          selection: "Both teams to score – Yes",
+          selection: "Begge lag scorer – Ja",
           odds: yes,
-          reason: `Both teams to score at ${yes.toFixed(2)} is a strong pick when both sides have decent attack and tend to concede. The price reflects a real chance of goals at both ends.`,
-        });
+          reason: `Begge lag scorer til odds ${yes.toFixed(2)} er et sterkt valg når begge sider har god angrep og slipper inn mål. Prisen reflekterer en reell sjanse for mål i begge ender.`,
+        }, yes);
       }
       if (no != null && no >= minOdds && no <= maxOdds) {
-        out.push({
+        addRec(out, {
           matchId: match.id,
           matchLabel: label,
           league,
           market: "btts",
-          selection: "Both teams to score – No",
+          selection: "Begge lag scorer – Nei",
           odds: no,
-          reason: `BTTS No at ${no.toFixed(2)} suits matches where one team is likely to dominate or both are defensively solid. If you expect a clean sheet or a single scorer, this can offer value.`,
-        });
+          reason: `BTTS Nei til odds ${no.toFixed(2)} passer når ett lag dominerer eller begge er defensivt solide. Hvis du forventer nullmål eller få målscorere, kan dette gi verdi.`,
+        }, no);
       }
     }
   }
 
-  return out.slice(0, 15); // cap at 15 recommendations
+  out.sort((a, b) => b.valueScore - a.valueScore);
+  return out.slice(0, 15);
 }

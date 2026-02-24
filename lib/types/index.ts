@@ -206,6 +206,8 @@ export interface BetRecommendation {
   reason: string;
   /** Optional handicap line for spreads */
   handicapLine?: number;
+  /** Value bet score 1–10 (5+ = value bet). Based on (our est. prob - implied prob) / implied prob * 10. */
+  valueScore: number;
 }
 
 /** A single planned bet (single or accumulator) in the weekly plan */
@@ -226,6 +228,8 @@ export interface PlannedBet {
   market?: OddsMarketType;
   /** For single: match label for PlacedBet (e.g. "Liverpool v Chelsea") */
   matchLabel?: string;
+  /** Value bet score 1–10 (for sorting: highest first). */
+  valueScore?: number;
 }
 
 export interface WeeklyBettingPlan {

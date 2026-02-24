@@ -165,6 +165,7 @@ export default function DashboardPage() {
         stakeNok: stake,
         potentialReturnNok: Math.round(stake * rec.odds * 100) / 100,
         reason: next.plannedBets[betIndex].reason,
+        valueScore: rec.valueScore,
       };
       next.totalStaked = next.plannedBets.reduce((s, b) => s + b.stakeNok, 0);
       next.totalPotentialReturn = next.plannedBets.reduce((s, b) => s + b.potentialReturnNok, 0);
@@ -185,6 +186,7 @@ export default function DashboardPage() {
         bet.potentialReturnNok = Math.round(bet.stakeNok * combined * 100) / 100;
         bet.selection = bet.legs.map((l, i) => `Leg ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · ");
         bet.matchLabel = bet.legs.map((l) => l.matchLabel).join(" · ");
+        bet.valueScore = Math.min(...bet.legs.map((l) => l.valueScore));
       }
       next.totalPotentialReturn = next.plannedBets.reduce((s, b) => s + b.potentialReturnNok, 0);
       return next;
@@ -205,6 +207,7 @@ export default function DashboardPage() {
       bet.potentialReturnNok = Math.round(bet.stakeNok * combined * 100) / 100;
       bet.selection = bet.legs!.map((l, i) => `Leg ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · ");
       bet.matchLabel = bet.legs!.map((l) => l.matchLabel).join(" · ");
+      bet.valueScore = bet.legs!.length ? Math.min(...bet.legs!.map((l) => l.valueScore)) : undefined;
       next.totalPotentialReturn = next.plannedBets.reduce((s, b) => s + b.potentialReturnNok, 0);
       return next;
     });
@@ -225,6 +228,7 @@ export default function DashboardPage() {
       bet.potentialReturnNok = Math.round(bet.stakeNok * combined * 100) / 100;
       bet.selection = bet.legs!.map((l, i) => `Leg ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · ");
       bet.matchLabel = bet.legs!.map((l) => l.matchLabel).join(" · ");
+      bet.valueScore = Math.min(...bet.legs!.map((l) => l.valueScore));
       next.totalPotentialReturn = next.plannedBets.reduce((s, b) => s + b.potentialReturnNok, 0);
       return next;
     });
@@ -479,7 +483,16 @@ export default function DashboardPage() {
                   >
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <span className="font-medium text-white">{rec.matchLabel}</span>
-                      <span className="text-sm font-medium text-[#14b8a6]">{rec.league}</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ValueScoreBadgeWithTooltip score={rec.valueScore} />
+                        <span className="text-sm font-medium text-[#14b8a6]">{rec.league}</span>
+                        <Link
+                          href={`/match/${rec.matchId}`}
+                          className="text-sm font-medium text-[#14b8a6] hover:underline"
+                        >
+                          Se kamp
+                        </Link>
+                      </div>
                     </div>
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
                       <span className="rounded-lg bg-white/5 px-2 py-1 text-[var(--fg)]">
@@ -542,9 +555,14 @@ export default function DashboardPage() {
                     className={`bet-card-hover rounded-xl border ${borderClass} bg-[var(--glass)] p-5 backdrop-blur-sm ${isAccumulator ? "ring-1 ring-[#8b5cf6]/30" : ""}`}
                   >
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <span className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-semibold text-white">
-                        {isMega ? "🔥 High Value · Mega accumulator" : isAccumulator ? "🔥 High Value · Accumulator" : "Enkeltspill"}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-semibold text-white">
+                          {isMega ? "🔥 High Value · Mega accumulator" : isAccumulator ? "🔥 High Value · Accumulator" : "Enkeltspill"}
+                        </span>
+                        {bet.valueScore != null && (
+                          <ValueScoreBadgeWithTooltip score={bet.valueScore} />
+                        )}
+                      </div>
                       <span className={`text-2xl font-bold tabular-nums ${valueColor(bet.odds)}`}>
                         {bet.odds.toFixed(2)}
                       </span>
@@ -926,6 +944,30 @@ function valueColor(odds: number) {
   if (odds <= 2) return "text-[var(--value-good)]";
   if (odds <= 2.8) return "text-[var(--value-medium)]";
   return "text-[var(--value-high-risk)]";
+}
+
+const VALUE_SCORE_TOOLTIP =
+  "Verdiscore viser hvor godt oddsen er sammenlignet med vår estimerte sannsynlighet. 7–10 = god verdi (bookmaker undervurderer). Under 4 = dårlig verdi.";
+
+function valueScoreBadge(score: number): { label: string; className: string } {
+  if (score >= 7) return { label: `Verdi: ${score}/10 🟢`, className: "text-[var(--value-good)]" };
+  if (score >= 4) return { label: `Verdi: ${score}/10 🟡`, className: "text-[var(--value-medium)]" };
+  return { label: `Verdi: ${score}/10 🔴`, className: "text-[var(--value-high-risk)]" };
+}
+
+function ValueScoreBadgeWithTooltip({ score }: { score: number }) {
+  const { label, className } = valueScoreBadge(score);
+  return (
+    <span className="group relative inline-block">
+      <span className={`cursor-help text-xs font-semibold ${className}`}>{label}</span>
+      <span
+        className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 w-56 -translate-x-1/2 rounded-lg border border-[var(--card-border)] bg-[var(--card)] px-2.5 py-2 text-xs text-[var(--fg)] opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100"
+        role="tooltip"
+      >
+        {VALUE_SCORE_TOOLTIP}
+      </span>
+    </span>
+  );
 }
 
 function OddsCell({

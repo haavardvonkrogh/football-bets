@@ -1,5 +1,10 @@
 import type { BetRecommendation, RiskProfile, WeeklyBettingPlan, PlannedBet } from "@/lib/types";
 
+/** Sort planned bets by value score (highest first). */
+function sortByValueScore(plannedBets: PlannedBet[]): PlannedBet[] {
+  return [...plannedBets].sort((a, b) => (b.valueScore ?? 0) - (a.valueScore ?? 0));
+}
+
 /**
  * Redistribute stakes so they sum exactly to weeklyBudgetNok. Uses proportional
  * allocation of the remainder (from Math.floor) so 100% of budget is used.
@@ -74,16 +79,17 @@ export function getWeeklyBettingPlan(
         stakeNok: stake,
         potentialReturnNok: Math.round(stake * rec.odds * 100) / 100,
         reason: `Lav risiko: enkeltspill med odds 1,6–2,2. Innsats ${pctPerBet}% av budsjettet.`,
+        valueScore: rec.valueScore,
       });
     }
-    const normalized = normalizeStakesToBudget(plannedBets, budget);
+    const normalized = sortByValueScore(normalizeStakesToBudget(plannedBets, budget));
     const totalStaked = normalized.reduce((s, b) => s + b.stakeNok, 0);
     const totalReturn = normalized.reduce((s, b) => s + b.potentialReturnNok, 0);
     return {
       plannedBets: normalized,
       totalStaked,
       totalPotentialReturn: Math.round(totalReturn * 100) / 100,
-      summaryReason: `Lav risiko: ${normalized.length} enkeltspill, 10–15% av budsjettet per bet, odds 1,6–2,2. Ingen accumulators. Total mulig retur ved alle treff: ${Math.round(totalReturn * 100) / 100} NOK.`,
+      summaryReason: `Lav risiko: ${normalized.length} enkeltspill, 10–15% av budsjettet per bet, odds 1,6–2,2. Ingen akkumulatorer. Total mulig retur ved alle treff: ${Math.round(totalReturn * 100) / 100} NOK.`,
     };
   }
 
@@ -116,6 +122,7 @@ export function getWeeklyBettingPlan(
         stakeNok: stake,
         potentialReturnNok: Math.round(stake * rec.odds * 100) / 100,
         reason: `Enkeltspill 15–25% av budsjettet, odds 1,8–2,8. Mulig retur: ${Math.round(stake * rec.odds * 100) / 100} NOK.`,
+        valueScore: rec.valueScore,
       });
     }
     if (hasAcca) {
@@ -126,14 +133,15 @@ export function getWeeklyBettingPlan(
         matchId: accaLegs[0].matchId,
         market: "totals",
         matchLabel: accaLegs.map((l) => l.matchLabel).join(" · "),
-        selection: accaLegs.map((l, i) => `Leg ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
+        selection: accaLegs.map((l, i) => `Kamp ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
         odds: Math.round(combinedOdds * 100) / 100,
         stakeNok: accaStakeNok,
         potentialReturnNok: Math.round(accaStakeNok * combinedOdds * 100) / 100,
-        reason: `2-fold accumulator, 20% av budsjettet. Mulig retur: ${Math.round(accaStakeNok * combinedOdds * 100) / 100} NOK.`,
+        reason: `2-fold akkumulator, 20% av budsjettet. Mulig retur: ${Math.round(accaStakeNok * combinedOdds * 100) / 100} NOK.`,
+        valueScore: Math.min(...accaLegs.map((l) => l.valueScore)),
       });
     }
-    const normalized = normalizeStakesToBudget(plannedBets, budget);
+    const normalized = sortByValueScore(normalizeStakesToBudget(plannedBets, budget));
     const totalStaked = normalized.reduce((s, b) => s + b.stakeNok, 0);
     const totalReturn = normalized.reduce((s, b) => s + b.potentialReturnNok, 0);
     return {
@@ -148,7 +156,7 @@ export function getWeeklyBettingPlan(
   // Prioritize: higher odds, Over 2.5, BTTS Yes, Asian handicap underdogs
   const preferred = (r: BetRecommendation) =>
     (r.market === "totals" && r.selection.toLowerCase().includes("over")) ||
-    (r.market === "btts" && r.selection.toLowerCase().includes("yes")) ||
+    (r.market === "btts" && (r.selection.toLowerCase().includes("yes") || r.selection.toLowerCase().includes("ja"))) ||
     r.market === "spreads";
   const pool = [...recommendations]
     .filter((r) => r.odds >= 2.0)
@@ -195,6 +203,7 @@ export function getWeeklyBettingPlan(
       stakeNok: stakeSingle,
       potentialReturnNok: ret,
       reason: `Verdibet (odds 3,0–6,0), 25% av budsjettet. Prioriterer Over 2.5 / BTTS Ja / Asian handicap. Potensiell retur ved treff: ${ret} NOK.`,
+      valueScore: rec.valueScore,
     });
   }
 
@@ -207,11 +216,12 @@ export function getWeeklyBettingPlan(
       matchId: threeFoldLegs[0].matchId,
       market: "totals",
       matchLabel: threeFoldLegs.map((l) => l.matchLabel).join(" · "),
-      selection: threeFoldLegs.map((l, i) => `Leg ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
+      selection: threeFoldLegs.map((l, i) => `Kamp ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
       odds: Math.round(combined * 100) / 100,
       stakeNok: stake3,
       potentialReturnNok: ret,
       reason: `3-fold (sikter kombinert odds 10–20), 15% av budsjettet. Potensiell retur ved treff: ${ret} NOK.`,
+      valueScore: Math.min(...threeFoldLegs.map((l) => l.valueScore)),
     });
   }
 
@@ -224,11 +234,12 @@ export function getWeeklyBettingPlan(
       matchId: fourFoldLegs[0].matchId,
       market: "totals",
       matchLabel: fourFoldLegs.map((l) => l.matchLabel).join(" · "),
-      selection: fourFoldLegs.map((l, i) => `Leg ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
+      selection: fourFoldLegs.map((l, i) => `Kamp ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
       odds: Math.round(combined * 100) / 100,
       stakeNok: stake4,
       potentialReturnNok: ret,
       reason: `4-fold (sikter kombinert odds 25–50), 15% av budsjettet. Potensiell retur ved treff: ${ret} NOK.`,
+      valueScore: Math.min(...fourFoldLegs.map((l) => l.valueScore)),
     });
   }
 
@@ -243,15 +254,16 @@ export function getWeeklyBettingPlan(
       matchId: megaUse[0].matchId,
       market: "totals",
       matchLabel: megaUse.map((l) => l.matchLabel).join(" · "),
-      selection: megaUse.map((l, i) => `Leg ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
+      selection: megaUse.map((l, i) => `Kamp ${i + 1}: ${l.matchLabel} – ${l.selection}`).join(" · "),
       odds: Math.round(combined * 100) / 100,
       stakeNok: stakeMega,
       potentialReturnNok: ret,
-      reason: `Mega accumulator (${megaCount}-fold, sikter odds 60–150+), 20% av budsjettet. Potensiell retur ved treff: ${ret} NOK.`,
+      reason: `Mega-akkumulator (${megaCount}-fold, sikter odds 60–150+), 20% av budsjettet. Potensiell retur ved treff: ${ret} NOK.`,
+      valueScore: Math.min(...megaUse.map((l) => l.valueScore)),
     });
   }
 
-  const normalized = normalizeStakesToBudget(plannedBets, budget);
+  const normalized = sortByValueScore(normalizeStakesToBudget(plannedBets, budget));
   const totalStaked = normalized.reduce((s, b) => s + b.stakeNok, 0);
   const totalReturn = normalized.reduce((s, b) => s + b.potentialReturnNok, 0);
   const megaText = megaCount >= 5 ? ` + mega ${megaCount}-fold (20%, odds 60–150+)` : "";
