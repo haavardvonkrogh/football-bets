@@ -38,6 +38,41 @@ export interface FootballDataMatchesResponse {
   matches: FootballDataMatch[];
 }
 
+/** Single match from GET /matches/{id} (includes venue etc.) */
+export interface FootballDataMatchDetail extends FootballDataMatch {
+  venue?: string;
+}
+
+/** Team matches response: GET /teams/{id}/matches */
+export interface TeamMatchesResponse {
+  matches: FootballDataMatch[];
+  resultSet?: { count: number; first: string; last: string; played: number; wins: number; draws: number; losses: number };
+}
+
+/** Standings table entry */
+export interface StandingTableEntry {
+  position: number;
+  team: { id: number; name: string; shortName: string | null; tla: string | null; crest: string | null };
+  playedGames: number;
+  won: number;
+  draw: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
+}
+
+export interface StandingsResponse {
+  standings: { table: StandingTableEntry[] }[];
+}
+
+/** Head2head: GET /matches/{id}/head2head */
+export interface Head2HeadResponse {
+  aggregates?: { numberOfMatches: number; homeTeam: { wins: number; draws: number; losses: number }; awayTeam: { wins: number; draws: number; losses: number } };
+  matches: FootballDataMatch[];
+}
+
 // ---- The Odds API ----
 
 export interface OddsOutcome {
@@ -91,8 +126,8 @@ export interface UpcomingMatch {
   };
   homeTeam: MatchTeam;
   awayTeam: MatchTeam;
-  /** Odds from the-odds-api (when merged) */
-  odds?: MatchOdds;
+  /** Odds from the-odds-api (normalized shape from /api/matches) */
+  odds?: ResponseOdds;
 }
 
 export type OddsMarketType = "btts" | "totals" | "spreads" | "h2h";
@@ -111,6 +146,14 @@ export interface MatchOdds {
   totals?: Record<string, MarketOddsSummary>; // key e.g. "2.5"
   spreads?: Record<string, MarketOddsSummary>; // key e.g. "-0.5"
   h2h?: MarketOddsSummary;
+}
+
+/** Normalized odds shape returned by /api/matches (and used by the UI). */
+export interface ResponseOdds {
+  btts?: { yes: number; no: number };
+  overUnder?: Array<{ line: number; over: number; under: number }>;
+  /** All 0.5-increment Asian Handicap lines (home/away pair per line). */
+  asianHandicap?: Array<{ home: { line: number; odds: number }; away: { line: number; odds: number } }>;
 }
 
 // ---- Budget & tracking (localStorage) ----
@@ -163,4 +206,32 @@ export interface BetRecommendation {
   reason: string;
   /** Optional handicap line for spreads */
   handicapLine?: number;
+}
+
+/** A single planned bet (single or accumulator) in the weekly plan */
+export interface PlannedBet {
+  type: "single" | "accumulator";
+  /** For accumulator: the legs that make up the bet */
+  legs?: BetRecommendation[];
+  /** Display label: selection (single) or "Leg 1 / Leg 2 / …" (accumulator) */
+  selection: string;
+  odds: number;
+  stakeNok: number;
+  potentialReturnNok: number;
+  /** Why this bet and stake fit the plan */
+  reason: string;
+  /** For single: match id for PlacedBet; for accumulator use first leg */
+  matchId?: number;
+  /** For single: market type for PlacedBet */
+  market?: OddsMarketType;
+  /** For single: match label for PlacedBet (e.g. "Liverpool v Chelsea") */
+  matchLabel?: string;
+}
+
+export interface WeeklyBettingPlan {
+  plannedBets: PlannedBet[];
+  totalStaked: number;
+  totalPotentialReturn: number;
+  /** Short explanation of the allocation strategy */
+  summaryReason: string;
 }

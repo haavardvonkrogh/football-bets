@@ -9,8 +9,8 @@ export function getRecommendations(
   riskProfile: RiskProfile
 ): BetRecommendation[] {
   const out: BetRecommendation[] = [];
-  const minOdds = riskProfile === "low" ? 1.5 : riskProfile === "medium" ? 1.4 : 1.3;
-  const maxOdds = riskProfile === "low" ? 2.2 : riskProfile === "medium" ? 2.8 : 3.5;
+  const minOdds = riskProfile === "low" ? 1.6 : riskProfile === "medium" ? 1.8 : 2.5;
+  const maxOdds = riskProfile === "low" ? 2.2 : riskProfile === "medium" ? 2.8 : 6.0;
 
   for (const match of matches) {
     const label = `${match.homeTeam.shortName ?? match.homeTeam.name} v ${match.awayTeam.shortName ?? match.awayTeam.name}`;
@@ -18,20 +18,19 @@ export function getRecommendations(
     const odds = match.odds;
     if (!odds) continue;
 
-    // Over/Under 2.5 goals
-    const totals25 = odds.totals?.["2.5"];
-    if (totals25?.bestOdds) {
-      const over = totals25.bestOdds["Over"] ?? totals25.bestOdds["Over 2.5"];
-      const under = totals25.bestOdds["Under"] ?? totals25.bestOdds["Under 2.5"];
+    // Over/Under – use overUnder array from API response
+    const overUnder = odds.overUnder ?? [];
+    for (const row of overUnder) {
+      const { line: point, over, under } = row;
       if (over != null && over >= minOdds && over <= maxOdds) {
         out.push({
           matchId: match.id,
           matchLabel: label,
           league,
           market: "totals",
-          selection: "Over 2.5 goals",
+          selection: `Over ${point} goals`,
           odds: over,
-          reason: `The odds for Over 2.5 goals (${over.toFixed(2)}) offer a good balance of risk and reward. Both teams have reasonable attacking potential, and this line is one of the most liquid markets, so the price is efficient.`,
+          reason: `The odds for Over ${point} goals (${over.toFixed(2)}) offer a good balance of risk and reward. Both teams have reasonable attacking potential, and this line can represent value.`,
         });
       }
       if (under != null && under >= minOdds && under <= maxOdds) {
@@ -40,27 +39,24 @@ export function getRecommendations(
           matchLabel: label,
           league,
           market: "totals",
-          selection: "Under 2.5 goals",
+          selection: `Under ${point} goals`,
           odds: under,
-          reason: `Under 2.5 goals at ${under.toFixed(2)} is a solid defensive pick. If one or both sides tend to play cautiously or have key attackers missing, the odds can represent value.`,
+          reason: `Under ${point} goals at ${under.toFixed(2)} is a solid defensive pick. If one or both sides tend to play cautiously or have key attackers missing, the odds can represent value.`,
         });
       }
     }
 
-    // Asian Handicap (spreads)
-    const spreads = odds.spreads;
-    if (spreads) {
-      for (const [lineKey, summary] of Object.entries(spreads)) {
-        const point = summary.point ?? parseFloat(lineKey);
-        if (Number.isNaN(point)) continue;
-        const home = summary.bestOdds[match.homeTeam.name] ?? summary.bestOdds["Home"];
-        const away = summary.bestOdds[match.awayTeam.name] ?? summary.bestOdds["Away"];
-        const [fav, underdog, favName, underdogName] =
-          point < 0
-            ? [home, away, match.homeTeam.shortName ?? match.homeTeam.name, match.awayTeam.shortName ?? match.awayTeam.name]
-            : [away, home, match.awayTeam.shortName ?? match.awayTeam.name, match.homeTeam.shortName ?? match.homeTeam.name];
-        const underdogOdds = underdog ?? (point < 0 ? away : home);
-        if (underdogOdds != null && underdogOdds >= minOdds && underdogOdds <= maxOdds) {
+    // Asian Handicap – use asianHandicap array from API response (all 0.5-increment lines)
+    const ahList = odds.asianHandicap;
+    if (ahList?.length) {
+      const homeName = match.homeTeam.shortName ?? match.homeTeam.name;
+      const awayName = match.awayTeam.shortName ?? match.awayTeam.name;
+      for (const ah of ahList) {
+        const { home, away } = ah;
+        const point = home.line;
+        const underdogOdds = point < 0 ? away.odds : home.odds;
+        const underdogName = point < 0 ? awayName : homeName;
+        if (underdogOdds >= minOdds && underdogOdds <= maxOdds) {
           const lineDesc = point > 0 ? `+${point}` : String(point);
           out.push({
             matchId: match.id,
@@ -76,11 +72,10 @@ export function getRecommendations(
       }
     }
 
-    // BTTS
+    // BTTS – use btts.yes / btts.no from API response
     const btts = odds.btts;
-    if (btts?.bestOdds) {
-      const yes = btts.bestOdds["Yes"];
-      const no = btts.bestOdds["No"];
+    if (btts) {
+      const { yes, no } = btts;
       if (yes != null && yes >= minOdds && yes <= maxOdds) {
         out.push({
           matchId: match.id,

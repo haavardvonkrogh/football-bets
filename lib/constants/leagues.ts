@@ -11,6 +11,8 @@ export const FOOTBALL_DATA_LEAGUES = [
   { code: "BL2", name: "2. Bundesliga" },
   { code: "DED", name: "Eredivisie" },
   { code: "BEL", name: "Belgian Pro League" },
+  { code: "CL", name: "UEFA Champions League" },
+  { code: "EL", name: "UEFA Europa League" },
 ] as const;
 
 export type FootballDataLeagueCode = (typeof FOOTBALL_DATA_LEAGUES)[number]["code"];
@@ -22,11 +24,14 @@ export type FootballDataLeagueCode = (typeof FOOTBALL_DATA_LEAGUES)[number]["cod
 export const ODDS_API_SPORT_KEYS: Record<string, string> = {
   "Premier League": "soccer_epl",
   "La Liga": "soccer_spain_la_liga",
+  "Primera Division": "soccer_spain_la_liga",
   "Bundesliga": "soccer_germany_bundesliga",
   "Serie A": "soccer_italy_serie_a",
   "2. Bundesliga": "soccer_germany_bundesliga2",
   "Eredivisie": "soccer_netherlands_eredivisie",
   "Belgian Pro League": "soccer_belgium_first_div",
+  "UEFA Champions League": "soccer_uefa_champs_league",
+  "UEFA Europa League": "soccer_uefa_europa_league",
 };
 
 export const ODDS_MARKETS = {

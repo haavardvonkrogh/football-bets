@@ -8,20 +8,86 @@ import type { OddsApiEvent } from "@/lib/types";
 import type { MatchOdds, MarketOddsSummary, OddsOutcome } from "@/lib/types";
 import { ODDS_MARKETS } from "@/lib/constants/leagues";
 
-/** Normalize team name for fuzzy matching (lowercase, trim, remove common suffixes). */
-function normalizeTeamName(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/\s+(fc|cf|cfc|sc|ud|afc|cf)\b/gi, "")
-    .replace(/\s+/g, " ");
+/** Allowed Asian Handicap lines: 0.5 increments only (no quarter lines). */
+const ALLOWED_SPREAD_POINTS = [-2, -1.5, -1, -0.5, 0.5, 1, 1.5, 2];
+
+function isAllowedSpreadPoint(point: number): boolean {
+  if (Math.abs(point) > 2) return false;
+  return ALLOWED_SPREAD_POINTS.some((p) => Math.abs(p - point) < 1e-6);
 }
 
-/** Check if two team names refer to the same team. */
+/** Totals market key (Over/Under goals). */
+const TOTALS_KEYS = [ODDS_MARKETS.TOTALS];
+
+const MIN_FUZZY_PREFIX_LEN = 4;
+
+/**
+ * Normalize team name for matching: remove common prefixes/suffixes, lowercase,
+ * collapse spaces, remove accents and non-alphanumeric.
+ */
+function normalizeTeamName(name: string): string {
+  let s = name
+    .trim()
+    .toLowerCase();
+  // Remove common club prefixes/suffixes (standalone or with trailing space)
+  s = s
+    .replace(/\bfc\b\.?/g, " ")
+    .replace(/\bafc\b\.?/g, " ")
+    .replace(/\bcf\b\.?/g, " ")
+    .replace(/\bsc\b\.?/g, " ")
+    .replace(/\bac\b\.?/g, " ")
+    .replace(/\b1\.\s*/g, " ")
+    .replace(/\bud\b\.?/gi, " ")
+    .replace(/\bcfc\b\.?/gi, " ");
+  // Remove special chars, keep letters numbers spaces; normalize accents (basic)
+  s = s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return s;
+}
+
+/**
+ * True if two team names refer to the same team: exact match, one contains the other,
+ * or normalized forms share at least MIN_FUZZY_PREFIX_LEN leading characters.
+ */
 function teamNamesMatch(a: string, b: string): boolean {
   const na = normalizeTeamName(a);
   const nb = normalizeTeamName(b);
-  return na === nb || na.includes(nb) || nb.includes(na);
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const minLen = Math.min(na.length, nb.length);
+  if (minLen >= MIN_FUZZY_PREFIX_LEN && na.slice(0, MIN_FUZZY_PREFIX_LEN) === nb.slice(0, MIN_FUZZY_PREFIX_LEN)) return true;
+  // Also check: one's first token equals the other's (e.g. "borussia dortmund" vs "dortmund")
+  const tokensA = na.split(/\s+/).filter(Boolean);
+  const tokensB = nb.split(/\s+/).filter(Boolean);
+  const longer = tokensA.length >= tokensB.length ? tokensA : tokensB;
+  const shorter = tokensA.length < tokensB.length ? tokensA : tokensB;
+  const matchByToken = shorter.some((t) => t.length >= MIN_FUZZY_PREFIX_LEN && longer.some((u) => u.startsWith(t) || t.startsWith(u)));
+  if (matchByToken) return true;
+  return false;
+}
+
+/** Exported for debugging: log first N team name pairs from each source. */
+export function logTeamNameSample(
+  footballDataMatches: FootballDataMatch[],
+  oddsEvents: OddsApiEvent[],
+  maxPairs = 3
+): void {
+  console.log("[merge-matches-odds] --- Team name sample (football-data.org) ---");
+  footballDataMatches.slice(0, maxPairs).forEach((m, i) => {
+    const home = m.homeTeam.name;
+    const away = m.awayTeam.name;
+    console.log(`  ${i + 1}. "${home}" vs "${away}" -> normalized: "${normalizeTeamName(home)}" vs "${normalizeTeamName(away)}"`);
+  });
+  console.log("[merge-matches-odds] --- Team name sample (the-odds-api.com) ---");
+  oddsEvents.slice(0, maxPairs).forEach((e, i) => {
+    const home = e.home_team;
+    const away = e.away_team;
+    console.log(`  ${i + 1}. "${home}" vs "${away}" -> normalized: "${normalizeTeamName(home)}" vs "${normalizeTeamName(away)}"`);
+  });
 }
 
 /** Same day (UTC date string). */
@@ -76,7 +142,7 @@ export function extractMatchOdds(event: OddsApiEvent): MatchOdds {
     if (market.key === ODDS_MARKETS.BTTS && market.outcomes?.length) {
       result.btts = bestOddsFromOutcomes(market.outcomes);
     }
-    if (market.key === ODDS_MARKETS.TOTALS && market.outcomes?.length) {
+    if (TOTALS_KEYS.includes(market.key) && market.outcomes?.length) {
       const point = market.outcomes[0]?.point;
       const key = point != null ? String(point) : "default";
       if (!result.totals) result.totals = {};
@@ -87,7 +153,8 @@ export function extractMatchOdds(event: OddsApiEvent): MatchOdds {
     }
     if (market.key === ODDS_MARKETS.SPREADS && market.outcomes?.length) {
       const point = market.outcomes[0]?.point;
-      const key = point != null ? String(point) : "default";
+      if (point == null || !isAllowedSpreadPoint(point)) continue;
+      const key = String(point);
       if (!result.spreads) result.spreads = {};
       result.spreads[key] = {
         ...bestOddsFromOutcomes(market.outcomes),
@@ -117,7 +184,7 @@ export function extractBestOddsAcrossBookmakers(event: OddsApiEvent): MatchOdds 
             if (odds > (result.btts.bestOdds[name] ?? 0))
               result.btts.bestOdds[name] = odds;
       }
-      if (market.key === ODDS_MARKETS.TOTALS && market.outcomes?.length) {
+      if (TOTALS_KEYS.includes(market.key) && market.outcomes?.length) {
         const point = market.outcomes[0]?.point;
         const key = point != null ? String(point) : "default";
         if (!result.totals) result.totals = {};
@@ -130,7 +197,8 @@ export function extractBestOddsAcrossBookmakers(event: OddsApiEvent): MatchOdds 
       }
       if (market.key === ODDS_MARKETS.SPREADS && market.outcomes?.length) {
         const point = market.outcomes[0]?.point;
-        const key = point != null ? String(point) : "default";
+        if (point == null || !isAllowedSpreadPoint(point)) continue;
+        const key = String(point);
         if (!result.spreads) result.spreads = {};
         const next = { ...bestOddsFromOutcomes(market.outcomes), point };
         if (!result.spreads[key]) result.spreads[key] = next;

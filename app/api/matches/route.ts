@@ -1,16 +1,17 @@
 /**
  * GET /api/matches
  * Returns upcoming matches with merged odds. Uses server cache (1h matches, 6h odds).
- * Only hits external APIs on cache miss. Client should call only on explicit Refresh.
+ * Odds: fetched per league using specific sport keys; BTTS fetched per event (cached 6h).
  */
 
 import { NextResponse } from "next/server";
 import { getUpcomingMatches } from "@/lib/api/football-data";
-import { getSportOdds } from "@/lib/api/odds-api";
+import { getSportOdds, getEventOdds } from "@/lib/api/odds-api";
 import { getOddsSportKeys } from "@/lib/api";
 import {
   findMatchingOddsEvent,
   extractBestOddsAcrossBookmakers,
+  logTeamNameSample,
 } from "@/lib/api/merge-matches-odds";
 import {
   getCached,
@@ -18,14 +19,56 @@ import {
   CacheKeys,
   ODDS_TTL_MS,
 } from "@/lib/cache/server-cache";
+import type { MatchOdds, ResponseOdds } from "@/lib/types";
 import type { UpcomingMatch } from "@/lib/types";
 import type { FootballDataMatch } from "@/lib/types";
 import type { OddsApiEvent } from "@/lib/types";
+
+/** Convert internal MatchOdds to the normalized API response shape (always include odds key). */
+function toResponseOdds(odds: MatchOdds | undefined, homeName?: string, awayName?: string): ResponseOdds {
+  const out: ResponseOdds = {};
+  if (!odds || Object.keys(odds).length === 0) return out;
+
+  if (odds.btts?.bestOdds) {
+    const yes = odds.btts.bestOdds["Yes"] ?? odds.btts.bestOdds["yes"];
+    const no = odds.btts.bestOdds["No"] ?? odds.btts.bestOdds["no"];
+    if (yes != null && no != null) out.btts = { yes, no };
+  }
+
+  if (odds.totals && Object.keys(odds.totals).length > 0) {
+    out.overUnder = [];
+    for (const [, s] of Object.entries(odds.totals)) {
+      const over = s.bestOdds["Over"] ?? s.bestOdds["Over 2.5"];
+      const under = s.bestOdds["Under"] ?? s.bestOdds["Under 2.5"];
+      const point = s.point ?? 2.5;
+      if (over != null && under != null) out.overUnder!.push({ line: point, over, under });
+    }
+    out.overUnder!.sort((a, b) => a.line - b.line);
+  }
+
+  if (odds.spreads && Object.keys(odds.spreads).length > 0 && homeName != null && awayName != null) {
+    const lines: Array<{ home: { line: number; odds: number }; away: { line: number; odds: number } }> = [];
+    for (const [, s] of Object.entries(odds.spreads)) {
+      const point = s.point ?? 0;
+      const homeOdds = s.bestOdds[homeName] ?? s.bestOdds["Home"];
+      const awayOdds = s.bestOdds[awayName] ?? s.bestOdds["Away"];
+      if (homeOdds == null || awayOdds == null) continue;
+      lines.push({
+        home: { line: point, odds: homeOdds },
+        away: { line: -point, odds: awayOdds },
+      });
+    }
+    lines.sort((a, b) => a.home.line - b.home.line);
+    if (lines.length) out.asianHandicap = lines;
+  }
+  return out;
+}
 
 function toUpcomingMatch(
   match: FootballDataMatch,
   odds?: ReturnType<typeof extractBestOddsAcrossBookmakers>
 ): UpcomingMatch {
+  const responseOdds = toResponseOdds(odds, match.homeTeam.name, match.awayTeam.name);
   return {
     id: match.id,
     utcDate: match.utcDate,
@@ -48,7 +91,7 @@ function toUpcomingMatch(
       shortName: match.awayTeam.shortName,
       crest: match.awayTeam.crest,
     },
-    ...(odds && Object.keys(odds).length > 0 ? { odds } : {}),
+    odds: responseOdds,
   };
 }
 
@@ -80,10 +123,8 @@ export async function GET() {
           console.log("[api/matches] No sport key for league:", leagueName);
           continue;
         }
-        if (leagueMatches.length === 0) {
-          console.log("[api/matches] Skipping", leagueName, "(no matches)");
-          continue;
-        }
+        if (leagueMatches.length === 0) continue;
+
         const cacheKey = CacheKeys.oddsEvent(sportKey);
         let events = getCached<OddsApiEvent[]>(cacheKey);
         if (events) {
@@ -93,16 +134,16 @@ export async function GET() {
             console.log("[api/matches] Fetching odds for", leagueName, "sportKey:", sportKey);
             const { events: fetched, usage } = await getSportOdds(sportKey, {
               regions: "uk",
-              markets: ["totals", "spreads"],
+              markets: ["totals", "spreads", "h2h"],
               oddsFormat: "decimal",
             });
-            events = fetched;
+            events = fetched ?? [];
             setCached(cacheKey, events, ODDS_TTL_MS);
-            console.log("[api/matches] Odds for", leagueName, ":", events.length, "events | usage:", usage);
             if (usage.requestsRemaining != null) oddsApiRemaining = usage.requestsRemaining;
             if (usage.requestsUsed != null) oddsApiUsed = usage.requestsUsed;
+            console.log("[api/matches] Odds for", leagueName, ":", events.length, "events | usage:", usage);
           } catch (e) {
-            console.error(`[api/matches] Odds fetch failed for ${leagueName}:`, e);
+            console.error("[api/matches] Odds fetch failed for", leagueName, e);
             continue;
           }
         }
@@ -110,18 +151,101 @@ export async function GET() {
       }
     }
 
+    // Log what we have for merging
+    const leagueNames = Array.from(leagueToOddsEvents.keys());
+    console.log("[api/matches] Leagues with odds events:", leagueNames.join(", ") || "(none)");
+    leagueToOddsEvents.forEach((evs, name) => {
+      console.log("[api/matches]   ", name, "->", evs.length, "events");
+    });
+
+    // Log first 3 team names from each API to compare formats
+    const firstLeagueKey = leagueNames[0];
+    const firstLeagueEvents = firstLeagueKey ? leagueToOddsEvents.get(firstLeagueKey) ?? [] : [];
+    logTeamNameSample(matches, firstLeagueEvents, 3);
+
     console.log("[api/matches] Returning usage: remaining =", oddsApiRemaining, ", used =", oddsApiUsed);
 
-    const result: UpcomingMatch[] = matches.map((match) => {
-      const events = leagueToOddsEvents.get(match.competition.name);
-      const oddsEvent = events
-        ? findMatchingOddsEvent(match, events)
-        : undefined;
-      const odds = oddsEvent
-        ? extractBestOddsAcrossBookmakers(oddsEvent)
-        : undefined;
-      return toUpcomingMatch(match, odds);
-    });
+    // Build matches with main odds (totals, spreads); then enrich with BTTS from event-level API (cached 6h).
+    const bttsUsage: { remaining: number | null; used: number | null }[] = [];
+    const result = await Promise.all(
+      matches.map(async (match, index): Promise<UpcomingMatch> => {
+        const leagueName = match.competition.name;
+        const events = leagueToOddsEvents.get(leagueName);
+        const oddsEvent = events
+          ? findMatchingOddsEvent(match, events)
+          : undefined;
+        let odds: MatchOdds | undefined = oddsEvent
+          ? extractBestOddsAcrossBookmakers(oddsEvent)
+          : undefined;
+
+        // Debug first match only
+        if (index === 0) {
+          console.log("[api/matches] First match:", match.homeTeam.name, "vs", match.awayTeam.name, "| league =", leagueName);
+          console.log("[api/matches]   events for league =", events?.length ?? 0, "| oddsEvent found =", !!oddsEvent);
+          if (oddsEvent) {
+            console.log("[api/matches]   oddsEvent id =", oddsEvent.id, "| home_team =", oddsEvent.home_team, "| away_team =", oddsEvent.away_team);
+          }
+          console.log("[api/matches]   extracted odds keys =", odds ? Object.keys(odds) : []);
+          if (odds?.totals) console.log("[api/matches]   totals keys =", Object.keys(odds.totals));
+          if (odds?.spreads) console.log("[api/matches]   spreads keys =", Object.keys(odds.spreads));
+          if (odds?.btts) console.log("[api/matches]   btts =", odds.btts.bestOdds);
+        }
+
+        // BTTS is a separate market: fetch per event (cached 6h).
+        const sportKey = hasOddsApiKey ? sportKeys[match.competition.name] : undefined;
+        if (oddsEvent && sportKey) {
+          const bttsCacheKey = CacheKeys.btts(sportKey, oddsEvent.id);
+          let bttsEvent = getCached<OddsApiEvent>(bttsCacheKey);
+          if (!bttsEvent) {
+            try {
+              const { event, usage } = await getEventOdds(sportKey, oddsEvent.id, {
+                markets: ["btts"],
+                regions: "uk",
+                oddsFormat: "decimal",
+              });
+              if (event) {
+                bttsEvent = event;
+                setCached(bttsCacheKey, event, ODDS_TTL_MS);
+              }
+              bttsUsage.push({
+                remaining: usage.requestsRemaining,
+                used: usage.requestsUsed,
+              });
+            } catch (e) {
+              console.warn("[api/matches] BTTS fetch failed for", oddsEvent.id, e);
+            }
+          }
+          if (bttsEvent) {
+            const merged = extractBestOddsAcrossBookmakers(bttsEvent);
+            if (merged.btts) odds = { ...odds, btts: merged.btts };
+          }
+        }
+
+        return toUpcomingMatch(match, odds);
+      })
+    );
+
+    if (bttsUsage.length > 0) {
+      const minRemaining = Math.min(
+        ...bttsUsage.map((u) => u.remaining ?? Infinity).filter((n) => n !== Infinity)
+      );
+      const maxUsed = Math.max(
+        ...bttsUsage.map((u) => u.used ?? -1).filter((n) => n >= 0)
+      );
+      if (minRemaining !== Infinity && minRemaining < (oddsApiRemaining ?? Infinity)) {
+        oddsApiRemaining = minRemaining;
+      }
+      if (maxUsed >= 0 && (oddsApiUsed == null || maxUsed > oddsApiUsed)) {
+        oddsApiUsed = maxUsed;
+      }
+    }
+
+    const matchesWithOddsCount = result.filter((m) => m.odds && Object.keys(m.odds).length > 0).length;
+    console.log("[api/matches] Result: matches with odds =", matchesWithOddsCount, "/", result.length);
+    if (result.length > 0) {
+      const first = result[0];
+      console.log("[api/matches] First match in response has odds key =", "odds" in first, "| odds keys =", first.odds ? Object.keys(first.odds) : []);
+    }
 
     return NextResponse.json({
       matches: result,

@@ -1,7 +1,7 @@
 /**
  * In-memory server cache with TTL for API responses.
  * football-data.org: 1 hour (10 calls/min limit)
- * the-odds-api: 6 hours (500 calls/month limit)
+ * the-odds-api: 6 hours (500 calls/month)
  */
 
 const CACHE = new Map<
@@ -30,7 +30,14 @@ export function setCached(key: string, value: unknown, ttlMs: number): void {
 
 export const CacheKeys = {
   upcomingMatches: "upcoming-matches",
+  /** Single cache for all soccer odds (one API call for sport_key "soccer"). */
+  oddsAllSoccer: "odds:all-soccer",
   oddsEvent: (sportKey: string) => `odds:${sportKey}`,
+  btts: (sportKey: string, eventId: string) => `btts:${sportKey}:${eventId}`,
+  match: (id: number) => `match:${id}`,
+  teamMatches: (teamId: number) => `team-matches:${teamId}`,
+  standings: (competitionId: number) => `standings:${competitionId}`,
+  head2head: (matchId: number) => `head2head:${matchId}`,
 };
 
 export { FOOTBALL_DATA_TTL_MS, ODDS_TTL_MS };

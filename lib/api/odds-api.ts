@@ -80,13 +80,21 @@ export async function getSportOdds(
   console.log("[odds-api] Parsed usage: remaining =", remaining, ", used =", used);
 
   const data = (await res.json()) as OddsApiEvent[];
+  const events = Array.isArray(data) ? data : [];
   const parsedRemaining = remaining != null && remaining !== "" ? parseInt(remaining, 10) : null;
   const parsedUsed = used != null && used !== "" ? parseInt(used, 10) : null;
   if (isNaN(parsedRemaining ?? NaN)) console.warn("[odds-api] parseInt(remaining) NaN for:", remaining);
   if (isNaN(parsedUsed ?? NaN)) console.warn("[odds-api] parseInt(used) NaN for:", used);
 
+  // Log raw response: first event object completely for debugging
+  console.log("[odds-api] getSportOdds response: events count =", events.length);
+  if (events.length > 0) {
+    const first = events[0];
+    console.log("[odds-api] First event (full raw object):", JSON.stringify(first, null, 2));
+  }
+
   return {
-    events: Array.isArray(data) ? data : [],
+    events,
     usage: {
       requestsRemaining: parsedRemaining != null && !isNaN(parsedRemaining) ? parsedRemaining : null,
       requestsUsed: parsedUsed != null && !isNaN(parsedUsed) ? parsedUsed : null,
@@ -96,6 +104,7 @@ export async function getSportOdds(
 
 /**
  * Fetch odds for a single event (used for BTTS and other additional markets).
+ * Returns event and usage so the caller can cache and aggregate usage.
  */
 export async function getEventOdds(
   sportKey: string,
@@ -105,7 +114,7 @@ export async function getEventOdds(
     regions: "uk",
     oddsFormat: "decimal",
   }
-): Promise<OddsApiEvent | null> {
+): Promise<{ event: OddsApiEvent | null; usage: OddsApiUsage }> {
   const apiKey = getApiKey();
   const searchParams = new URLSearchParams({
     apiKey,
@@ -115,16 +124,30 @@ export async function getEventOdds(
   });
 
   const url = `${BASE_URL}/sports/${sportKey}/events/${eventId}/odds?${searchParams.toString()}`;
-  const res = await fetch(url, { next: { revalidate: 120 } });
+  const res = await fetch(url, { cache: "no-store" });
+
+  let remaining: string | null = res.headers.get("x-requests-remaining") ?? res.headers.get("X-Requests-Remaining");
+  let used = res.headers.get("x-requests-used") ?? res.headers.get("X-Requests-Used");
+  if (remaining == null || used == null) {
+    for (const [name, value] of res.headers.entries()) {
+      const lower = name.toLowerCase();
+      if (lower.includes("remaining")) remaining = value;
+      if (lower.includes("used") && !lower.includes("last")) used = value;
+    }
+  }
+  const usage: OddsApiUsage = {
+    requestsRemaining: remaining != null && remaining !== "" ? parseInt(remaining, 10) : null,
+    requestsUsed: used != null && used !== "" ? parseInt(used, 10) : null,
+  };
 
   if (!res.ok) {
-    if (res.status === 404) return null;
+    if (res.status === 404) return { event: null, usage };
     const text = await res.text();
     throw new Error(`The Odds API event odds error ${res.status}: ${text}`);
   }
 
   const data = (await res.json()) as OddsApiEvent;
-  return data ?? null;
+  return { event: data ?? null, usage };
 }
 
 /**

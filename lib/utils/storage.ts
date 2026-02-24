@@ -4,7 +4,7 @@
  */
 
 import type { UpcomingMatch } from "@/lib/types";
-import type { UserSettings, PlacedBet, BetResult, WeekSummary } from "@/lib/types";
+import type { UserSettings, PlacedBet, BetResult, WeekSummary, WeeklyBettingPlan, PlannedBet } from "@/lib/types";
 
 const PREFIX = "football-bets";
 
@@ -98,6 +98,55 @@ export function getStoredResults(): BetResult[] {
 
 export function setStoredResults(results: BetResult[]): void {
   safeSet(StorageKeys.results, results);
+}
+
+/** Get ISO week key for a date (e.g. "2025-W08") */
+export function getCurrentWeekKey(): string {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const days = Math.floor((now.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+  const week = Math.ceil((days + start.getDay() + 1) / 7);
+  return `${now.getFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+/** Update or add a single bet result */
+export function setBetResult(result: BetResult): void {
+  const results = getStoredResults();
+  const idx = results.findIndex((r) => r.betId === result.betId);
+  const next = idx >= 0 ? results.map((r, i) => (i === idx ? result : r)) : [...results, result];
+  setStoredResults(next);
+}
+
+/** Add a placed bet */
+export function addPlacedBet(bet: Omit<PlacedBet, "id" | "placedAt" | "weekKey">): PlacedBet {
+  const bets = getStoredBets();
+  const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `bet-${Date.now()}`;
+  const weekKey = getCurrentWeekKey();
+  const placed: PlacedBet = {
+    ...bet,
+    id,
+    placedAt: new Date().toISOString(),
+    weekKey,
+  };
+  setStoredBets([...bets, placed]);
+  return placed;
+}
+
+/** Save the entire weekly plan as placed bets (current week). Used when user confirms plan. */
+export function confirmWeeklyPlan(plan: WeeklyBettingPlan): void {
+  for (const bet of plan.plannedBets) {
+    const matchId = bet.matchId ?? (bet.legs?.[0]?.matchId ?? 0);
+    const matchLabel = bet.matchLabel ?? (bet.type === "accumulator" ? `Accumulator (${bet.legs?.length ?? 0} legs)` : bet.selection.split(":")[0]?.trim() ?? "");
+    const market = bet.market ?? "totals";
+    addPlacedBet({
+      matchId,
+      matchLabel,
+      market,
+      selection: bet.selection,
+      odds: bet.odds,
+      stake: bet.stakeNok,
+    });
+  }
 }
 
 /** Build week summaries from bets + results for P/L tracker */
