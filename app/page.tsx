@@ -1014,7 +1014,7 @@ function ResultsTab({
                     <Tooltip
                       contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--card-border)", borderRadius: "12px" }}
                       labelStyle={{ color: "var(--fg)" }}
-                      formatter={(value: number) => [formatNok(value), "Resultat"]}
+                      formatter={(value: number | undefined) => [formatNok(value ?? 0), "Resultat"]}
                       labelFormatter={(_, payload) => payload[0]?.payload?.weekKey ?? ""}
                     />
                     <Bar dataKey="profitLoss" name="Resultat" radius={[4, 4, 0, 0]}>
@@ -1036,7 +1036,7 @@ function ResultsTab({
                     <YAxis tick={{ fill: "var(--muted)", fontSize: 11 }} tickFormatter={(v) => `${v} kr`} />
                     <Tooltip
                       contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--card-border)", borderRadius: "12px" }}
-                      formatter={(value: number) => [formatNok(value), "Kumulativt"]}
+                      formatter={(value: number | undefined) => [formatNok(value ?? 0), "Kumulativt"]}
                     />
                     <Line type="monotone" dataKey="cumulative" stroke="#14b8a6" strokeWidth={2} dot={{ fill: "#14b8a6", r: 3 }} name="Kumulativt" />
                   </LineChart>
