@@ -196,6 +196,7 @@ export function extractBestOddsAcrossBookmakers(event: OddsApiEvent): MatchOdds 
               result.totals[key].bestOdds[name] = odds;
       }
       if (market.key === ODDS_MARKETS.SPREADS && market.outcomes?.length) {
+        // Each outcome can have its own point (-0.5 / +0.5); use first outcome's point for this line
         const point = market.outcomes[0]?.point;
         if (point == null || !isAllowedSpreadPoint(point)) continue;
         const key = String(point);

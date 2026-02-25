@@ -18,6 +18,18 @@ export const FOOTBALL_DATA_LEAGUES = [
 export type FootballDataLeagueCode = (typeof FOOTBALL_DATA_LEAGUES)[number]["code"];
 
 /**
+ * Map football-data.org competition names to UI display names.
+ * Use getLeagueDisplayName() so "Primera Division" shows as "La Liga" etc.
+ */
+export const LEAGUE_DISPLAY_NAMES: Record<string, string> = {
+  "Primera Division": "La Liga",
+};
+
+export function getLeagueDisplayName(apiName: string): string {
+  return LEAGUE_DISPLAY_NAMES[apiName] ?? apiName;
+}
+
+/**
  * the-odds-api sport keys for soccer.
  * Must match leagues we fetch from football-data.org for merging.
  */

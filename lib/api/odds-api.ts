@@ -86,11 +86,20 @@ export async function getSportOdds(
   if (isNaN(parsedRemaining ?? NaN)) console.warn("[odds-api] parseInt(remaining) NaN for:", remaining);
   if (isNaN(parsedUsed ?? NaN)) console.warn("[odds-api] parseInt(used) NaN for:", used);
 
-  // Log raw response: first event object completely for debugging
+  // Log raw response: first event and spreads market for debugging
   console.log("[odds-api] getSportOdds response: events count =", events.length);
   if (events.length > 0) {
     const first = events[0];
-    console.log("[odds-api] First event (full raw object):", JSON.stringify(first, null, 2));
+    console.log("[odds-api] First event id =", first.id, "home_team =", first.home_team, "away_team =", first.away_team);
+    for (const bm of first.bookmakers ?? []) {
+      const spreadsMarket = bm.markets?.find((m) => m.key === "spreads");
+      if (spreadsMarket) {
+        console.log("[odds-api] RAW spreads market (bookmaker =", bm.key, "):", JSON.stringify(spreadsMarket, null, 2));
+        break; // log first bookmaker that has spreads
+      }
+    }
+    const anySpreads = (first.bookmakers ?? []).some((b) => b.markets?.some((m) => m.key === "spreads"));
+    if (!anySpreads) console.log("[odds-api] No spreads market in any bookmaker for first event. Market keys present:", first.bookmakers?.flatMap((b) => b.markets?.map((m) => m.key) ?? []) ?? []);
   }
 
   return {

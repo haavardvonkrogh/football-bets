@@ -214,6 +214,24 @@ export interface BetRecommendation {
   confidenceScore: number;
 }
 
+/** A recommendation saved to history (for Anbefalingshistorikk). */
+export interface SavedRecommendation {
+  matchId: number;
+  homeTeam: string;
+  awayTeam: string;
+  league: string;
+  date: string;
+  betType: OddsMarketType;
+  odds: number;
+  valueScore: number;
+  confidenceScore: number;
+  /** Display label for the selection (e.g. "Over 2.5", "Hjemmeseier") */
+  selection: string;
+  status: "pending" | "won" | "lost";
+  /** Optional stable id for list keys and future result linking */
+  id?: string;
+}
+
 /** A single planned bet (single or accumulator) in the weekly plan */
 export interface PlannedBet {
   type: "single" | "accumulator";

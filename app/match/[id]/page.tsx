@@ -20,6 +20,7 @@ import {
   buildSofaScoreContextSummary,
   type SofaScoreMatchData,
 } from "@/lib/sofascore";
+import { getLeagueDisplayName } from "@/lib/constants/leagues";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("nb-NO", {
@@ -278,7 +279,7 @@ export default function MatchPreviewPage() {
         {/* 1. Match header */}
         <section className="glass-card mb-6 overflow-hidden">
           <div className="border-b border-[var(--card-border)] bg-gradient-to-r from-[var(--accent)]/10 to-[var(--accent-secondary)]/10 p-6">
-            <p className="mb-1 text-sm font-medium text-[var(--muted)]">{match.competition.name}</p>
+            <p className="mb-1 text-sm font-medium text-[var(--muted)]">{getLeagueDisplayName(match.competition.name)}</p>
             <p className="text-sm text-[var(--muted)]">
               {formatDate(match.utcDate)}
               {match.venue ? ` · ${match.venue}` : ""}

@@ -4,7 +4,7 @@
  */
 
 import type { UpcomingMatch } from "@/lib/types";
-import type { UserSettings, PlacedBet, BetResult, WeekSummary, WeeklyBettingPlan, PlannedBet } from "@/lib/types";
+import type { UserSettings, PlacedBet, BetResult, WeekSummary, WeeklyBettingPlan, PlannedBet, BetRecommendation, SavedRecommendation } from "@/lib/types";
 import type { MatchResult } from "@/lib/utils/bet-outcome";
 
 const PREFIX = "football-bets";
@@ -16,6 +16,7 @@ export const StorageKeys = {
   settings: `${PREFIX}:settings`,
   bets: `${PREFIX}:bets`,
   results: `${PREFIX}:results`,
+  recommendationHistory: `${PREFIX}:recommendation-history`,
   matchResult: (matchId: number) => `${PREFIX}:match-result:${matchId}`,
 } as const;
 
@@ -92,6 +93,49 @@ export function getStoredBets(): PlacedBet[] {
 
 export function setStoredBets(bets: PlacedBet[]): void {
   safeSet(StorageKeys.bets, bets);
+}
+
+export function getStoredRecommendationHistory(): SavedRecommendation[] {
+  return safeJsonParse(StorageKeys.recommendationHistory, []);
+}
+
+export function setStoredRecommendationHistory(history: SavedRecommendation[]): void {
+  safeSet(StorageKeys.recommendationHistory, history);
+}
+
+/** Merge new recommendations into stored history. Adds only items not already present (same matchId + betType + selection + date). */
+export function mergeRecommendationHistory(recommendations: BetRecommendation[], matches: UpcomingMatch[]): void {
+  const existing = getStoredRecommendationHistory();
+  const key = (r: SavedRecommendation) => `${r.matchId}:${r.betType}:${r.selection}:${r.date}`;
+  const existingKeys = new Set(existing.map(key));
+  const matchById = new Map(matches.map((m) => [m.id, m]));
+  const toAdd: SavedRecommendation[] = [];
+  for (const r of recommendations) {
+    const match = matchById.get(r.matchId);
+    if (!match) continue;
+    const date = (match.utcDate || "").slice(0, 10);
+    const saved: SavedRecommendation = {
+      matchId: r.matchId,
+      homeTeam: match.homeTeam?.name ?? "",
+      awayTeam: match.awayTeam?.name ?? "",
+      league: r.league,
+      date,
+      betType: r.market,
+      odds: r.odds,
+      valueScore: r.valueScore,
+      confidenceScore: r.confidenceScore,
+      selection: r.selection,
+      status: "pending",
+      id: `rec-${r.matchId}-${r.market}-${r.selection}-${date}`.replace(/\s/g, "_"),
+    };
+    if (!existingKeys.has(key(saved))) {
+      existingKeys.add(key(saved));
+      toAdd.push(saved);
+    }
+  }
+  if (toAdd.length > 0) {
+    setStoredRecommendationHistory([...existing, ...toAdd]);
+  }
 }
 
 export function getStoredResults(): BetResult[] {

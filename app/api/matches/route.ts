@@ -24,8 +24,15 @@ import type { UpcomingMatch } from "@/lib/types";
 import type { FootballDataMatch } from "@/lib/types";
 import type { OddsApiEvent } from "@/lib/types";
 
-/** Convert internal MatchOdds to the normalized API response shape (always include odds key). */
-function toResponseOdds(odds: MatchOdds | undefined, homeName?: string, awayName?: string): ResponseOdds {
+/** Convert internal MatchOdds to the normalized API response shape (always include odds key).
+ * For spreads, outcome names come from the Odds API (event.home_team / event.away_team); pass apiHomeTeam/apiAwayTeam when available so lookup succeeds. */
+function toResponseOdds(
+  odds: MatchOdds | undefined,
+  homeName?: string,
+  awayName?: string,
+  apiHomeTeam?: string,
+  apiAwayTeam?: string
+): ResponseOdds {
   const out: ResponseOdds = {};
   if (!odds || Object.keys(odds).length === 0) return out;
 
@@ -46,12 +53,13 @@ function toResponseOdds(odds: MatchOdds | undefined, homeName?: string, awayName
     out.overUnder!.sort((a, b) => a.line - b.line);
   }
 
-  if (odds.spreads && Object.keys(odds.spreads).length > 0 && homeName != null && awayName != null) {
+  if (odds.spreads && Object.keys(odds.spreads).length > 0 && (homeName != null || apiHomeTeam != null) && (awayName != null || apiAwayTeam != null)) {
     const lines: Array<{ home: { line: number; odds: number }; away: { line: number; odds: number } }> = [];
     for (const [, s] of Object.entries(odds.spreads)) {
       const point = s.point ?? 0;
-      const homeOdds = s.bestOdds[homeName] ?? s.bestOdds["Home"];
-      const awayOdds = s.bestOdds[awayName] ?? s.bestOdds["Away"];
+      // Odds API outcome names are the event's home_team/away_team; try those first, then football-data names
+      const homeOdds = s.bestOdds[apiHomeTeam ?? ""] ?? s.bestOdds[homeName ?? ""] ?? s.bestOdds["Home"];
+      const awayOdds = s.bestOdds[apiAwayTeam ?? ""] ?? s.bestOdds[awayName ?? ""] ?? s.bestOdds["Away"];
       if (homeOdds == null || awayOdds == null) continue;
       lines.push({
         home: { line: point, odds: homeOdds },
@@ -66,9 +74,16 @@ function toResponseOdds(odds: MatchOdds | undefined, homeName?: string, awayName
 
 function toUpcomingMatch(
   match: FootballDataMatch,
-  odds?: ReturnType<typeof extractBestOddsAcrossBookmakers>
+  odds?: ReturnType<typeof extractBestOddsAcrossBookmakers>,
+  oddsEvent?: OddsApiEvent
 ): UpcomingMatch {
-  const responseOdds = toResponseOdds(odds, match.homeTeam.name, match.awayTeam.name);
+  const responseOdds = toResponseOdds(
+    odds,
+    match.homeTeam.name,
+    match.awayTeam.name,
+    oddsEvent?.home_team,
+    oddsEvent?.away_team
+  );
   return {
     id: match.id,
     utcDate: match.utcDate,
@@ -133,7 +148,7 @@ export async function GET() {
           try {
             console.log("[api/matches] Fetching odds for", leagueName, "sportKey:", sportKey);
             const { events: fetched, usage } = await getSportOdds(sportKey, {
-              regions: "uk",
+              regions: "eu", // eu has spreads for soccer; market key is "spreads"
               markets: ["totals", "spreads", "h2h"],
               oddsFormat: "decimal",
             });
@@ -178,7 +193,7 @@ export async function GET() {
           ? extractBestOddsAcrossBookmakers(oddsEvent)
           : undefined;
 
-        // Debug first match only
+        // Debug first match only (spreads: log outcome names so we can verify team name lookup)
         if (index === 0) {
           console.log("[api/matches] First match:", match.homeTeam.name, "vs", match.awayTeam.name, "| league =", leagueName);
           console.log("[api/matches]   events for league =", events?.length ?? 0, "| oddsEvent found =", !!oddsEvent);
@@ -187,7 +202,12 @@ export async function GET() {
           }
           console.log("[api/matches]   extracted odds keys =", odds ? Object.keys(odds) : []);
           if (odds?.totals) console.log("[api/matches]   totals keys =", Object.keys(odds.totals));
-          if (odds?.spreads) console.log("[api/matches]   spreads keys =", Object.keys(odds.spreads));
+          if (odds?.spreads) {
+            console.log("[api/matches]   spreads keys =", Object.keys(odds.spreads));
+            for (const [lineKey, s] of Object.entries(odds.spreads)) {
+              console.log("[api/matches]   spreads[" + lineKey + "] outcome names =", Object.keys(s.bestOdds));
+            }
+          }
           if (odds?.btts) console.log("[api/matches]   btts =", odds.btts.bestOdds);
         }
 
@@ -221,7 +241,7 @@ export async function GET() {
           }
         }
 
-        return toUpcomingMatch(match, odds);
+        return toUpcomingMatch(match, odds, oddsEvent);
       })
     );
 

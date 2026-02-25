@@ -15,7 +15,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import type { UpcomingMatch } from "@/lib/types";
-import type { UserSettings, RiskProfile, WeeklyBettingPlan, PlannedBet, BetRecommendation } from "@/lib/types";
+import type { UserSettings, RiskProfile, WeeklyBettingPlan, PlannedBet, BetRecommendation, SavedRecommendation } from "@/lib/types";
 import {
   getStoredMatches,
   getStoredRefreshedAt,
@@ -24,6 +24,8 @@ import {
   getStoredSettings,
   setStoredSettings,
   getWeekSummaries,
+  getStoredRecommendationHistory,
+  mergeRecommendationHistory,
   setBetResult,
   addPlacedBet,
   getCurrentWeekKey,
@@ -36,8 +38,7 @@ import {
 import { computeBetOutcome } from "@/lib/utils/bet-outcome";
 import { getRecommendations } from "@/lib/utils/recommendations";
 import { getWeeklyBettingPlan } from "@/lib/utils/betting-plan";
-import { getPlanSummary } from "@/lib/utils/plan-summary";
-import { FOOTBALL_DATA_LEAGUES } from "@/lib/constants/leagues";
+import { FOOTBALL_DATA_LEAGUES, getLeagueDisplayName } from "@/lib/constants/leagues";
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -68,6 +69,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [leagueFilter, setLeagueFilter] = useState<string>("all");
   const [weekSummaries, setWeekSummaries] = useState(getWeekSummaries());
+  const [recommendationHistory, setRecommendationHistory] = useState<SavedRecommendation[]>(getStoredRecommendationHistory());
   const [activeTab, setActiveTab] = useState<"matches" | "plan" | "results">("matches");
   const [planConfirmedMessage, setPlanConfirmedMessage] = useState(false);
   const [planEditMode, setPlanEditMode] = useState(false);
@@ -84,6 +86,7 @@ export default function DashboardPage() {
     setUsage(getStoredUsage());
     setSettings(getStoredSettings());
     setWeekSummaries(getWeekSummaries());
+    setRecommendationHistory(getStoredRecommendationHistory());
   }, []);
 
   useEffect(() => {
@@ -129,13 +132,18 @@ export default function DashboardPage() {
   const filteredMatches =
     leagueFilter === "all"
       ? matches
-      : matches.filter((m) => m.competition.name === leagueFilter);
+      : matches.filter((m) => getLeagueDisplayName(m.competition.name) === leagueFilter);
   const recommendations = getRecommendations(filteredMatches, settings.riskProfile);
   const weeklyPlan = getWeeklyBettingPlan(
     recommendations,
     settings.weeklyBudget,
     settings.riskProfile
   );
+
+  useEffect(() => {
+    mergeRecommendationHistory(recommendations, filteredMatches);
+    setRecommendationHistory(getStoredRecommendationHistory());
+  }, [matches.length, leagueFilter, settings.riskProfile]);
 
   const displayPlan: WeeklyBettingPlan | null = planSource === "edited" && editedPlan ? editedPlan : weeklyPlan ?? null;
 
@@ -417,7 +425,7 @@ export default function DashboardPage() {
                   <span className="pill bg-[var(--accent)]/15 text-[var(--accent)]">
                     Ukens kamp
                   </span>
-                  <span className="text-sm text-[var(--muted)]">{featuredMatch.competition.name}</span>
+                  <span className="text-sm text-[var(--muted)]">{getLeagueDisplayName(featuredMatch.competition.name)}</span>
                 </div>
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-6">
                   <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
@@ -638,7 +646,7 @@ export default function DashboardPage() {
                           </div>
                         </td>
                         <td className="py-4 pr-4">
-                          <span className="pill bg-[var(--card)] text-[var(--muted)]">{m.competition.name}</span>
+                          <span className="pill bg-[var(--card)] text-[var(--muted)]">{getLeagueDisplayName(m.competition.name)}</span>
                         </td>
                         <td className="py-4 pr-4 text-sm text-[var(--muted)]">{formatDate(m.utcDate)}</td>
                         <td className="py-4 pr-4">
@@ -708,36 +716,6 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* Weekly summary - at top when we have a plan */}
-        {displayPlan && displayPlan.plannedBets.length > 0 && (() => {
-          const summary = getPlanSummary(displayPlan, settings.riskProfile);
-          const confidenceLabel = summary.confidence === "high" ? "Høy" : summary.confidence === "medium" ? "Middels" : "Lav";
-          const confidenceColor = summary.confidence === "high" ? "text-[var(--value-good)]" : summary.confidence === "medium" ? "text-[var(--value-medium)]" : "text-[var(--value-high-risk)]";
-          return (
-            <section className="glass-card mb-6 p-5">
-              <h2 className="mb-4 text-lg font-semibold text-white">Ukas oppsummering</h2>
-              <p className="mb-4 leading-relaxed text-[var(--fg)]">
-                {summary.summaryText}
-              </p>
-              <div className="mb-4 flex flex-wrap items-center gap-4">
-                <div>
-                  <span className="text-sm text-[var(--muted)]">Tillit til planen: </span>
-                  <span className={`font-semibold ${confidenceColor}`}>{confidenceLabel}</span>
-                </div>
-              </div>
-              {summary.bestBet && (
-                <div className="rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 p-4">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Ukas beste spill</p>
-                  <p className="font-medium text-white">{summary.bestBet.selection}</p>
-                  <p className="text-sm text-[var(--muted)]">
-                    Odds <span className="text-xl font-bold text-[var(--accent)]">{summary.bestBet.odds.toFixed(2)}</span> · Potensiell retur {formatNok(summary.bestBet.potentialReturnNok)}
-                  </p>
-                </div>
-              )}
-            </section>
-          );
-        })()}
-
         {/* Recommendations */}
         {recommendations.length > 0 && (
           <section className="glass-card mb-6 p-5">
@@ -759,7 +737,7 @@ export default function DashboardPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <ValueScoreBadgeWithTooltip score={rec.valueScore} />
                         <ConfidenceBadgeWithTooltip score={rec.confidenceScore} />
-                        <span className="pill bg-[var(--accent)]/10 text-[var(--accent)]">{rec.league}</span>
+                        <span className="pill bg-[var(--accent)]/10 text-[var(--accent)]">{getLeagueDisplayName(rec.league)}</span>
                         <Link
                           href={`/match/${rec.matchId}`}
                           className="text-sm font-medium text-[var(--accent)] transition duration-200 hover:underline"
@@ -944,6 +922,7 @@ export default function DashboardPage() {
         {activeTab === "results" && (
           <ResultsTab
             weekSummaries={weekSummaries}
+            recommendationHistory={recommendationHistory}
             onUpdate={() => loadFromStorage()}
             formatNok={formatNok}
           />
@@ -963,10 +942,12 @@ function getBetTypeLabel(bet: { market: string; selection: string }): string {
 
 function ResultsTab({
   weekSummaries,
+  recommendationHistory,
   onUpdate,
   formatNok,
 }: {
   weekSummaries: ReturnType<typeof getWeekSummaries>;
+  recommendationHistory: SavedRecommendation[];
   onUpdate: () => void;
   formatNok: (n: number) => string;
 }) {
@@ -1133,6 +1114,55 @@ function ResultsTab({
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Anbefalingshistorikk */}
+      <div className="mb-8 rounded-2xl border border-[var(--card-border)] bg-[var(--bg)]/40 p-5 backdrop-blur-sm">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">Anbefalingshistorikk</h3>
+        {recommendationHistory.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">Ingen anbefalinger lagret ennå. Anbefalinger lagres når du har kamper lastet inn og ser på Plan-tab.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-[var(--card-border)] text-[var(--muted)]">
+                  <th className="pb-2 pr-3 font-medium">Kamp</th>
+                  <th className="pb-2 pr-3 font-medium">Liga</th>
+                  <th className="pb-2 pr-3 font-medium">Dato</th>
+                  <th className="pb-2 pr-3 font-medium">Spill</th>
+                  <th className="pb-2 pr-3 font-medium">Odds</th>
+                  <th className="pb-2 pr-3 font-medium">Verdi</th>
+                  <th className="pb-2 pr-3 font-medium">Tillit</th>
+                  <th className="pb-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...recommendationHistory]
+                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                  .map((r) => (
+                    <tr key={r.id ?? `${r.matchId}-${r.betType}-${r.selection}-${r.date}`} className="border-b border-[var(--card-border)]/60 last:border-0">
+                      <td className="py-2.5 pr-3 text-white">{r.homeTeam} – {r.awayTeam}</td>
+                      <td className="py-2.5 pr-3 text-[var(--muted)]">{getLeagueDisplayName(r.league)}</td>
+                      <td className="py-2.5 pr-3 text-[var(--muted)]">{r.date}</td>
+                      <td className="py-2.5 pr-3 text-white">{r.selection}</td>
+                      <td className="py-2.5 pr-3 text-white">{r.odds.toFixed(2)}</td>
+                      <td className="py-2.5 pr-3 text-white">{r.valueScore.toFixed(1)}</td>
+                      <td className="py-2.5 pr-3 text-white">{r.confidenceScore}%</td>
+                      <td className="py-2.5">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                          r.status === "pending" ? "bg-amber-500/20 text-amber-400" :
+                          r.status === "won" ? "bg-emerald-500/20 text-emerald-400" :
+                          "bg-red-500/20 text-red-400"
+                        }`}>
+                          {r.status === "pending" ? "Venter" : r.status === "won" ? "Vunnet" : "Tapt"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Charts */}
@@ -1467,20 +1497,6 @@ function OddsCell({
   );
 }
 
-function TotalsCell({ overUnder }: { overUnder?: Array<{ line: number; over: number; under: number }> }) {
-  if (!overUnder?.length) return <span className="text-[var(--muted)]">–</span>;
-  const sorted = [...overUnder].sort((a, b) => a.line - b.line);
-  return (
-    <div className="space-y-1.5 text-sm">
-      {sorted.map(({ line, over, under }) => (
-        <div key={line} className="space-y-0.5">
-          <div className="text-[var(--muted)]">O {line} <span className="font-bold text-[var(--accent)] tabular-nums">@ {over.toFixed(2)}</span> / U {line} <span className="font-bold text-[var(--accent)] tabular-nums">@ {under.toFixed(2)}</span></div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function formatHandicap(point: number): string {
   return point >= 0 ? `+${point}` : String(point);
 }
@@ -1508,3 +1524,18 @@ function SpreadsCell({
     </div>
   );
 }
+
+function TotalsCell({ overUnder }: { overUnder?: Array<{ line: number; over: number; under: number }> }) {
+  if (!overUnder?.length) return <span className="text-[var(--muted)]">–</span>;
+  const sorted = [...overUnder].sort((a, b) => a.line - b.line);
+  return (
+    <div className="space-y-1.5 text-sm">
+      {sorted.map(({ line, over, under }) => (
+        <div key={line} className="space-y-0.5">
+          <div className="text-[var(--muted)]">O {line} <span className="font-bold text-[var(--accent)] tabular-nums">@ {over.toFixed(2)}</span> / U {line} <span className="font-bold text-[var(--accent)] tabular-nums">@ {under.toFixed(2)}</span></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
