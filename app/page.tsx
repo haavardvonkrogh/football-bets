@@ -72,6 +72,8 @@ export default function DashboardPage() {
   const [draftPlan, setDraftPlan] = useState<WeeklyBettingPlan | null>(null);
   const [swapModal, setSwapModal] = useState<{ betIndex: number; legIndex?: number } | null>(null);
   const [editedPlan, setEditedPlan] = useState<WeeklyBettingPlan | null>(null);
+  const [planSummaryAi, setPlanSummaryAi] = useState<string | null>(null);
+  const [planSummaryAiLoading, setPlanSummaryAiLoading] = useState(false);
 
   const loadFromStorage = useCallback(() => {
     setMatches(getStoredMatches());
@@ -251,6 +253,95 @@ export default function DashboardPage() {
     });
     setSwapModal(null);
   }, []);
+
+  const PLAN_SUMMARY_CACHE_PREFIX = "plan-summary-ai:";
+  const PLAN_SUMMARY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+  const planSummaryCacheKey = useCallback((plan: WeeklyBettingPlan, riskProfile: string, budget: number) => {
+    const payload = JSON.stringify({
+      b: budget,
+      r: riskProfile,
+      s: plan.totalStaked,
+      p: plan.totalPotentialReturn,
+      n: plan.plannedBets.length,
+      bets: plan.plannedBets.map((b) => ({ o: b.odds, s: b.stakeNok, sel: b.selection })),
+    });
+    let h = 0;
+    for (let i = 0; i < payload.length; i++) h = ((h << 5) - h + payload.charCodeAt(i)) | 0;
+    return `${PLAN_SUMMARY_CACHE_PREFIX}${(h >>> 0).toString(36)}`;
+  }, []);
+
+  const loadPlanSummaryAi = useCallback(async () => {
+    const plan = displayPlan;
+    if (!plan || plan.plannedBets.length === 0) return;
+    const key = planSummaryCacheKey(plan, settings.riskProfile, settings.weeklyBudget);
+    if (typeof localStorage !== "undefined") {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const { t, summary } = JSON.parse(raw) as { t: number; summary: string };
+          if (Date.now() - t < PLAN_SUMMARY_CACHE_TTL_MS && summary) {
+            setPlanSummaryAi(summary);
+            return;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    setPlanSummaryAiLoading(true);
+    setPlanSummaryAi(null);
+    try {
+      const res = await fetch("/api/plan/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: {
+            plannedBets: plan.plannedBets.map((b) => ({
+              type: b.type,
+              selection: b.selection,
+              odds: b.odds,
+              stakeNok: b.stakeNok,
+              potentialReturnNok: b.potentialReturnNok,
+              reason: b.reason,
+              legs: b.legs,
+            })),
+            totalStaked: plan.totalStaked,
+            totalPotentialReturn: plan.totalPotentialReturn,
+            summaryReason: plan.summaryReason,
+          },
+          riskProfile: settings.riskProfile,
+          weeklyBudget: settings.weeklyBudget,
+        }),
+      });
+      if (!res.ok) {
+        setPlanSummaryAi(null);
+        return;
+      }
+      const json = (await res.json()) as { summary?: string };
+      const summary = json.summary?.trim();
+      if (summary) {
+        setPlanSummaryAi(summary);
+        if (typeof localStorage !== "undefined") {
+          try {
+            localStorage.setItem(key, JSON.stringify({ t: Date.now(), summary }));
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch {
+      setPlanSummaryAi(null);
+    } finally {
+      setPlanSummaryAiLoading(false);
+    }
+  }, [displayPlan, settings.riskProfile, settings.weeklyBudget, planSummaryCacheKey]);
+
+  useEffect(() => {
+    if (activeTab === "plan" && displayPlan && displayPlan.plannedBets.length > 0) {
+      loadPlanSummaryAi();
+    }
+  }, [activeTab, displayPlan, loadPlanSummaryAi]);
 
   const tabs = [
     { id: "matches" as const, label: "Kamper & Odds" },
@@ -579,6 +670,39 @@ export default function DashboardPage() {
             <p className="font-semibold text-[var(--value-good)]">Ukens spilleplan er låst inn!</p>
             <p className="text-sm text-[var(--muted)]">Se Resultater-fanen for å registrere resultater.</p>
           </div>
+        )}
+
+        {/* AI-generated plan summary */}
+        {displayPlan && displayPlan.plannedBets.length > 0 && (planSummaryAiLoading || planSummaryAi) && (
+          <section className="relative mb-6 overflow-hidden rounded-2xl border border-transparent p-[2px] bg-[linear-gradient(to_bottom_right,#7c3aed,#6366f1,#3b82f6)] shadow-[0_0_24px_-8px_rgba(124,58,237,0.4)]">
+            <div className="relative rounded-[14px] bg-[var(--card)]/95 p-5 backdrop-blur-sm">
+              <div className="absolute inset-0 pointer-events-none rounded-[14px] bg-gradient-to-br from-[var(--accent-secondary)]/10 via-transparent to-[#3b82f6]/10" />
+              <div className="relative flex items-center gap-2 mb-3">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-gradient-to-r from-[var(--accent-secondary)] to-[#6366f1] text-xs font-bold text-white">
+                  AI
+                </span>
+                <h2 className="text-lg font-semibold text-white">Ukas spilleplan – AI-oppsummering</h2>
+              </div>
+              {planSummaryAiLoading && (
+                <div className="flex items-center justify-center gap-3 py-8 text-[var(--muted)]">
+                  <svg
+                    className="h-8 w-8 animate-spin text-[var(--accent-secondary)]"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                  >
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <p className="text-sm">Genererer oppsummering…</p>
+                </div>
+              )}
+              {!planSummaryAiLoading && planSummaryAi && (
+                <p className="leading-relaxed text-[var(--fg)]">{planSummaryAi}</p>
+              )}
+            </div>
+          </section>
         )}
 
         {/* Weekly summary - at top when we have a plan */}

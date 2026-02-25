@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { FootballDataMatch } from "@/lib/types";
@@ -14,6 +14,12 @@ import {
   generateBetAnalysis,
   type Last5Summary,
 } from "@/lib/utils/match-analysis";
+import {
+  fetchSofaScoreMatchData,
+  adjustRecommendationsWithSofaScore,
+  buildSofaScoreContextSummary,
+  type SofaScoreMatchData,
+} from "@/lib/sofascore";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("nb-NO", {
@@ -75,6 +81,9 @@ export default function MatchPreviewPage() {
   const [aiAgreesWithRecommendation, setAiAgreesWithRecommendation] = useState<boolean | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [sofascoreData, setSofaScoreData] = useState<SofaScoreMatchData | null>(null);
+  const sofascoreDataRef = useRef<SofaScoreMatchData | null>(null);
+  sofascoreDataRef.current = sofascoreData;
 
   useEffect(() => {
     const id = params?.id;
@@ -109,6 +118,19 @@ export default function MatchPreviewPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!data?.match) return;
+    const m = data.match;
+    fetchSofaScoreMatchData(
+      m.id,
+      m.utcDate,
+      m.homeTeam.name,
+      m.awayTeam.name
+    )
+      .then((d) => setSofaScoreData(d ?? null))
+      .catch(() => setSofaScoreData(null));
+  }, [data?.match]);
+
   const CACHE_KEY_PREFIX = "ai-analysis:";
   const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -135,13 +157,24 @@ export default function MatchPreviewPage() {
       const storedMatches = getStoredMatches();
       const settings = getStoredSettings();
       const allRecs = getRecommendations(storedMatches, settings.riskProfile);
-      const matchRecs = allRecs.filter((r) => r.matchId === matchId).map((r) => ({
+      const rawMatchRecs = allRecs.filter((r) => r.matchId === matchId);
+      const sofascore = sofascoreDataRef.current;
+      const adjustedRecs = adjustRecommendationsWithSofaScore(
+        rawMatchRecs,
+        sofascore,
+        data.match.homeTeam.name,
+        data.match.awayTeam.name,
+        data.match.homeTeam.shortName ?? null,
+        data.match.awayTeam.shortName ?? null
+      );
+      const matchRecs = adjustedRecs.map((r) => ({
         market: r.market,
         selection: r.selection,
         odds: r.odds,
         valueScore: r.valueScore,
         confidenceScore: r.confidenceScore,
       }));
+      const sofascoreContext = buildSofaScoreContextSummary(sofascore ?? null);
       const res = await fetch(`/api/match/${matchId}/analysis`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -154,6 +187,7 @@ export default function MatchPreviewPage() {
           },
           odds: odds ?? undefined,
           recommendations: matchRecs.length ? matchRecs : undefined,
+          sofascoreContext: sofascoreContext || undefined,
         }),
       });
       if (!res.ok) {
@@ -186,9 +220,11 @@ export default function MatchPreviewPage() {
   }, [matchId, data?.match, odds]);
 
   useEffect(() => {
-    if (data?.match && !aiLoading && aiAnalysis === null && aiError === null) {
+    if (!data?.match || aiLoading || aiAnalysis !== null || aiError !== null) return;
+    const t = setTimeout(() => {
       loadAiAnalysis();
-    }
+    }, 2500);
+    return () => clearTimeout(t);
   }, [data?.match, aiLoading, aiAnalysis, aiError, loadAiAnalysis]);
 
   if (loading && !data) {
@@ -364,6 +400,123 @@ export default function MatchPreviewPage() {
             </div>
           </div>
         </section>
+
+        {/* SofaScore: injuries, form with xG, season xG */}
+        {sofascoreData && (
+          <section className="glass-card mb-6 p-5">
+            <h2 className="mb-4 text-lg font-semibold text-white">SofaScore</h2>
+
+            {(sofascoreData.injuries.home.length > 0 || sofascoreData.injuries.away.length > 0) && (
+              <div className="mb-6">
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">Skader &amp; suspensjoner</h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 p-4 backdrop-blur-sm">
+                    <p className="mb-2 text-xs font-medium text-[var(--muted)]">{match.homeTeam.shortName ?? match.homeTeam.name}</p>
+                    <ul className="space-y-1.5 text-sm text-white">
+                      {sofascoreData.injuries.home.map((p, i) => (
+                        <li key={i}>
+                          <span className="font-medium">{p.name}</span>
+                          {p.reason && <span className="text-[var(--muted)]"> · {p.reason}</span>}
+                          {p.expectedReturn && <span className="block text-xs text-[var(--muted)]">Tilbake: {p.expectedReturn}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 p-4 backdrop-blur-sm">
+                    <p className="mb-2 text-xs font-medium text-[var(--muted)]">{match.awayTeam.shortName ?? match.awayTeam.name}</p>
+                    <ul className="space-y-1.5 text-sm text-white">
+                      {sofascoreData.injuries.away.map((p, i) => (
+                        <li key={i}>
+                          <span className="font-medium">{p.name}</span>
+                          {p.reason && <span className="text-[var(--muted)]"> · {p.reason}</span>}
+                          {p.expectedReturn && <span className="block text-xs text-[var(--muted)]">Tilbake: {p.expectedReturn}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(sofascoreData.homeForm.last5.length > 0 || sofascoreData.awayForm.last5.length > 0) && (
+              <div className="mb-6">
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">Form (siste 5 med xG)</h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 p-4 backdrop-blur-sm">
+                    <div className="mb-3 flex items-center gap-2">
+                      {match.homeTeam.crest && <img src={match.homeTeam.crest} alt="" className="h-8 w-8 object-contain" />}
+                      <span className="font-semibold text-white">{sofascoreData.homeForm.teamName}</span>
+                    </div>
+                    <div className="mb-2 flex gap-1">
+                      {sofascoreData.homeForm.last5.map((fm, i) => (
+                        <span
+                          key={i}
+                          className={`flex h-8 w-8 items-center justify-center rounded text-sm font-bold ${
+                            fm.result === "W" ? "bg-[var(--value-good)]/30 text-[var(--value-good)]" : fm.result === "L" ? "bg-[var(--value-high-risk)]/30 text-[var(--value-high-risk)]" : "bg-[var(--value-medium)]/30 text-[var(--value-medium)]"
+                          }`}
+                          title={fm.opponent + (fm.date ? ` ${fm.date}` : "") + (fm.xgFor != null ? ` · xG ${fm.xgFor.toFixed(1)}–${(fm.xgAgainst ?? 0).toFixed(1)}` : "")}
+                        >
+                          {fm.result}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-sm text-[var(--muted)]">
+                      {sofascoreData.homeForm.last5.map((f) => `${f.goalsFor}-${f.goalsAgainst}`).join(", ")}
+                      {(sofascoreData.homeForm.last5.some((f) => f.xgFor != null)) && (
+                        <span className="ml-2">(xG: {sofascoreData.homeForm.last5.filter((f) => f.xgFor != null).map((f) => `${f.xgFor!.toFixed(1)}–${(f.xgAgainst ?? 0).toFixed(1)}`).join(", ")})</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 p-4 backdrop-blur-sm">
+                    <div className="mb-3 flex items-center gap-2">
+                      {match.awayTeam.crest && <img src={match.awayTeam.crest} alt="" className="h-8 w-8 object-contain" />}
+                      <span className="font-semibold text-white">{sofascoreData.awayForm.teamName}</span>
+                    </div>
+                    <div className="mb-2 flex gap-1">
+                      {sofascoreData.awayForm.last5.map((fm, i) => (
+                        <span
+                          key={i}
+                          className={`flex h-8 w-8 items-center justify-center rounded text-sm font-bold ${
+                            fm.result === "W" ? "bg-[var(--value-good)]/30 text-[var(--value-good)]" : fm.result === "L" ? "bg-[var(--value-high-risk)]/30 text-[var(--value-high-risk)]" : "bg-[var(--value-medium)]/30 text-[var(--value-medium)]"
+                          }`}
+                          title={fm.opponent + (fm.date ? ` ${fm.date}` : "") + (fm.xgFor != null ? ` · xG ${fm.xgFor.toFixed(1)}–${(fm.xgAgainst ?? 0).toFixed(1)}` : "")}
+                        >
+                          {fm.result}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-sm text-[var(--muted)]">
+                      {sofascoreData.awayForm.last5.map((f) => `${f.goalsFor}-${f.goalsAgainst}`).join(", ")}
+                      {(sofascoreData.awayForm.last5.some((f) => f.xgFor != null)) && (
+                        <span className="ml-2">(xG: {sofascoreData.awayForm.last5.filter((f) => f.xgFor != null).map((f) => `${f.xgFor!.toFixed(1)}–${(f.xgAgainst ?? 0).toFixed(1)}`).join(", ")})</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(sofascoreData.homeForm.seasonAvgXg != null || sofascoreData.awayForm.seasonAvgXg != null) && (
+              <div className="mb-6">
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">xG sesongsnitt</h3>
+                <div className="flex flex-wrap gap-6">
+                  <div className="flex items-center gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 px-4 py-3 backdrop-blur-sm">
+                    {match.homeTeam.crest && <img src={match.homeTeam.crest} alt="" className="h-8 w-8 object-contain" />}
+                    <span className="text-white">{match.homeTeam.shortName ?? match.homeTeam.name}</span>
+                    <span className="font-bold text-[var(--accent)]">{sofascoreData.homeForm.seasonAvgXg?.toFixed(2) ?? "–"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--card)]/60 px-4 py-3 backdrop-blur-sm">
+                    {match.awayTeam.crest && <img src={match.awayTeam.crest} alt="" className="h-8 w-8 object-contain" />}
+                    <span className="text-white">{match.awayTeam.shortName ?? match.awayTeam.name}</span>
+                    <span className="font-bold text-[var(--accent)]">{sofascoreData.awayForm.seasonAvgXg?.toFixed(2) ?? "–"}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <p className="text-right text-xs text-[var(--muted)]">Kilde: SofaScore</p>
+          </section>
+        )}
 
         {/* 3. Head to head */}
         <section className="glass-card mb-6 p-5">

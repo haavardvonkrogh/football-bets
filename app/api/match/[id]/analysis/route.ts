@@ -35,10 +35,12 @@ export interface AnalysisRequestBody {
   };
   /** Our automated recommendations for this match; AI should support or explain disagreement */
   recommendations?: MatchRecommendation[];
+  /** Optional SofaScore context (injuries, xG, form) for better insights */
+  sofascoreContext?: string;
 }
 
 function buildPrompt(body: AnalysisRequestBody): string {
-  const { match, odds, recommendations } = body;
+  const { match, odds, recommendations, sofascoreContext } = body;
   const home = match.homeTeam.shortName ?? match.homeTeam.name;
   const away = match.awayTeam.shortName ?? match.awayTeam.name;
   const date = new Date(match.utcDate).toLocaleDateString("nb-NO", {
@@ -101,6 +103,7 @@ ${recommendations
 
 **Tilgjengelige odds:**
 ${oddsBlock}
+${sofascoreContext ? `\n**SofaScore-kontekst (bruk dette i analysen):** ${sofascoreContext}\n` : ""}
 ${recommendationBlock}
 
 Skriv analysen på norsk med disse fire delene (bruk overskrifter som vist):
