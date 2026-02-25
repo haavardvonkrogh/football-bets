@@ -20,10 +20,34 @@ function isAllowedSpreadPoint(point: number): boolean {
 const TOTALS_KEYS = [ODDS_MARKETS.TOTALS];
 
 const MIN_FUZZY_PREFIX_LEN = 4;
+/** Min token length for prefix/token matching so "Man" can match "Manchester" */
+const MIN_TOKEN_MATCH_LEN = 2;
+
+/** Common abbreviations (Odds API / display) to expand for matching football-data full names.
+ * Only whole-word replacement; "Wolverhampton" vs "Wolverhampton Wanderers" is handled by contains check. */
+const TEAM_ABBREVIATIONS: Record<string, string> = {
+  man: "manchester",
+  "man u": "manchester united",
+  "man utd": "manchester united",
+  "man united": "manchester united",
+  spurs: "tottenham",
+  "west ham": "west ham united",
+  wolves: "wolverhampton",
+  inter: "internazionale",
+  "man city": "manchester city",
+  atleti: "atletico",
+  barca: "barcelona",
+  psg: "paris saint germain",
+  bayern: "bayern munich",
+  newcastle: "newcastle united",
+  leicester: "leicester city",
+  brighton: "brighton and hove albion",
+  nottingham: "nottingham forest",
+};
 
 /**
  * Normalize team name for matching: remove common prefixes/suffixes, lowercase,
- * collapse spaces, remove accents and non-alphanumeric.
+ * collapse spaces, remove accents, expand abbreviations.
  */
 function normalizeTeamName(name: string): string {
   let s = name
@@ -46,12 +70,18 @@ function normalizeTeamName(name: string): string {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  // Expand common abbreviations so "man united" matches "manchester united"
+  for (const [abbr, full] of Object.entries(TEAM_ABBREVIATIONS)) {
+    const wordBoundary = new RegExp(`\\b${abbr.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
+    s = s.replace(wordBoundary, full);
+  }
+  s = s.replace(/\s+/g, " ").trim();
   return s;
 }
 
 /**
  * True if two team names refer to the same team: exact match, one contains the other,
- * or normalized forms share at least MIN_FUZZY_PREFIX_LEN leading characters.
+ * shared prefix, or any token from one is a prefix of a token in the other (e.g. Dortmund, Man/Manchester).
  */
 function teamNamesMatch(a: string, b: string): boolean {
   const na = normalizeTeamName(a);
@@ -60,12 +90,16 @@ function teamNamesMatch(a: string, b: string): boolean {
   if (na.includes(nb) || nb.includes(na)) return true;
   const minLen = Math.min(na.length, nb.length);
   if (minLen >= MIN_FUZZY_PREFIX_LEN && na.slice(0, MIN_FUZZY_PREFIX_LEN) === nb.slice(0, MIN_FUZZY_PREFIX_LEN)) return true;
-  // Also check: one's first token equals the other's (e.g. "borussia dortmund" vs "dortmund")
+  // Token match: "Borussia Dortmund" vs "Dortmund", "Manchester United" vs "Man United"
   const tokensA = na.split(/\s+/).filter(Boolean);
   const tokensB = nb.split(/\s+/).filter(Boolean);
   const longer = tokensA.length >= tokensB.length ? tokensA : tokensB;
   const shorter = tokensA.length < tokensB.length ? tokensA : tokensB;
-  const matchByToken = shorter.some((t) => t.length >= MIN_FUZZY_PREFIX_LEN && longer.some((u) => u.startsWith(t) || t.startsWith(u)));
+  const matchByToken = shorter.some(
+    (t) =>
+      t.length >= MIN_TOKEN_MATCH_LEN &&
+      longer.some((u) => u.startsWith(t) || t.startsWith(u) || u === t)
+  );
   if (matchByToken) return true;
   return false;
 }
@@ -113,6 +147,57 @@ export function findMatchingOddsEvent(
       teamNamesMatch(event.away_team, awayName)
     );
   });
+}
+
+/**
+ * Same as findMatchingOddsEvent but logs for each match: football-data names vs odds API names,
+ * and whether the match succeeded or failed (with candidate events if failed).
+ */
+export function findMatchingOddsEventWithLogging(
+  match: FootballDataMatch,
+  oddsEvents: OddsApiEvent[]
+): OddsApiEvent | undefined {
+  const homeFd = match.homeTeam.name;
+  const awayFd = match.awayTeam.name;
+  const league = match.competition.name;
+  const matched = findMatchingOddsEvent(match, oddsEvents ?? []);
+
+  if (matched) {
+    console.log(
+      "[merge] MATCHED | fd:",
+      homeFd,
+      "vs",
+      awayFd,
+      "| league:",
+      league,
+      "| odds API:",
+      matched.home_team,
+      "vs",
+      matched.away_team
+    );
+  } else {
+    const count = oddsEvents?.length ?? 0;
+    const candidates = (oddsEvents ?? [])
+      .slice(0, 6)
+      .map((e) => `"${e.home_team}" vs "${e.away_team}"`);
+    console.log(
+      "[merge] NO MATCH | fd:",
+      homeFd,
+      "vs",
+      awayFd,
+      "| league:",
+      league,
+      "| fd normalized:",
+      normalizeTeamName(homeFd),
+      "/",
+      normalizeTeamName(awayFd),
+      "| odds events in league:",
+      count,
+      count ? "| candidates: " + candidates.join(" ; ") : ""
+    );
+  }
+
+  return matched;
 }
 
 /**

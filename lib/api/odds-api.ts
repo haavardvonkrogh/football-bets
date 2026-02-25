@@ -22,8 +22,12 @@ function getApiKey(): string {
 
 export type OddsRegions = "uk" | "eu" | "us" | "au";
 
+/** Comma-separated regions for maximum coverage across bookmakers (Premier League, Bundesliga, Serie A, La Liga, Eredivisie, Belgian Pro League, UCL, UEL). */
+export const DEFAULT_ODDS_REGIONS = "uk,eu,us,au";
+
 interface OddsRequestParams {
-  regions?: OddsRegions;
+  /** Comma-separated regions e.g. "uk,eu,us,au" or single region */
+  regions?: OddsRegions | string;
   markets?: string[];
   oddsFormat?: "decimal" | "american";
 }
@@ -45,7 +49,7 @@ export async function getSportOdds(
   const apiKey = getApiKey();
   const searchParams = new URLSearchParams({
     apiKey,
-    regions: params.regions ?? "uk",
+    regions: params.regions ?? DEFAULT_ODDS_REGIONS,
     oddsFormat: params.oddsFormat ?? "decimal",
     markets: (params.markets ?? [ODDS_MARKETS.TOTALS, ODDS_MARKETS.SPREADS]).join(","),
   });
@@ -61,13 +65,7 @@ export async function getSportOdds(
     console.log("[odds-api]   ", name, "=", res.headers.get(name));
   }
 
-  if (!res.ok) {
-    const text = await res.text();
-    console.error("[odds-api] Error response body:", text.slice(0, 200));
-    throw new Error(`The Odds API error ${res.status}: ${text}`);
-  }
-
-  // Headers are often lowercased by fetch; fallback: find by name containing "remaining" / "used"
+  // Parse usage from headers (available even on error responses)
   let remaining = res.headers.get("x-requests-remaining") ?? res.headers.get("X-Requests-Remaining");
   let used = res.headers.get("x-requests-used") ?? res.headers.get("X-Requests-Used");
   if (remaining == null || used == null) {
@@ -77,12 +75,31 @@ export async function getSportOdds(
       if (lower.includes("used") && !lower.includes("last")) used = value;
     }
   }
+  const parsedRemaining = remaining != null && remaining !== "" ? parseInt(remaining, 10) : null;
+  const parsedUsed = used != null && used !== "" ? parseInt(used, 10) : null;
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error("[odds-api] Error response body:", text.slice(0, 300));
+    const quotaExceeded =
+      res.status === 401 || res.status === 429 || text.includes("OUT_OF_USAGE_CREDITS") || text.includes("quota has been reached");
+    if (quotaExceeded) {
+      console.warn("[odds-api] Usage quota exceeded – returning empty odds so matches still load. Refill at the-odds-api.com or wait for reset.");
+      return {
+        events: [],
+        usage: {
+          requestsRemaining: parsedRemaining ?? 0,
+          requestsUsed: parsedUsed ?? null,
+        },
+      };
+    }
+    throw new Error(`The Odds API error ${res.status}: ${text}`);
+  }
+
   console.log("[odds-api] Parsed usage: remaining =", remaining, ", used =", used);
 
   const data = (await res.json()) as OddsApiEvent[];
   const events = Array.isArray(data) ? data : [];
-  const parsedRemaining = remaining != null && remaining !== "" ? parseInt(remaining, 10) : null;
-  const parsedUsed = used != null && used !== "" ? parseInt(used, 10) : null;
   if (isNaN(parsedRemaining ?? NaN)) console.warn("[odds-api] parseInt(remaining) NaN for:", remaining);
   if (isNaN(parsedUsed ?? NaN)) console.warn("[odds-api] parseInt(used) NaN for:", used);
 
@@ -120,14 +137,14 @@ export async function getEventOdds(
   eventId: string,
   params: OddsRequestParams & { markets: string[] } = {
     markets: [ODDS_MARKETS.BTTS],
-    regions: "uk",
+    regions: DEFAULT_ODDS_REGIONS,
     oddsFormat: "decimal",
   }
 ): Promise<{ event: OddsApiEvent | null; usage: OddsApiUsage }> {
   const apiKey = getApiKey();
   const searchParams = new URLSearchParams({
     apiKey,
-    regions: params.regions ?? "uk",
+    regions: params.regions ?? DEFAULT_ODDS_REGIONS,
     oddsFormat: params.oddsFormat ?? "decimal",
     markets: params.markets.join(","),
   });
@@ -144,14 +161,21 @@ export async function getEventOdds(
       if (lower.includes("used") && !lower.includes("last")) used = value;
     }
   }
+  const parsedRem = remaining != null && remaining !== "" ? parseInt(remaining, 10) : null;
+  const parsedUse = used != null && used !== "" ? parseInt(used, 10) : null;
   const usage: OddsApiUsage = {
-    requestsRemaining: remaining != null && remaining !== "" ? parseInt(remaining, 10) : null,
-    requestsUsed: used != null && used !== "" ? parseInt(used, 10) : null,
+    requestsRemaining: parsedRem != null && !isNaN(parsedRem) ? parsedRem : null,
+    requestsUsed: parsedUse != null && !isNaN(parsedUse) ? parsedUse : null,
   };
 
   if (!res.ok) {
     if (res.status === 404) return { event: null, usage };
     const text = await res.text();
+    const quotaExceeded =
+      res.status === 401 || res.status === 429 || text.includes("OUT_OF_USAGE_CREDITS") || text.includes("quota has been reached");
+    if (quotaExceeded) {
+      return { event: null, usage: { requestsRemaining: parsedRem ?? 0, requestsUsed: parsedUse ?? null } };
+    }
     throw new Error(`The Odds API event odds error ${res.status}: ${text}`);
   }
 

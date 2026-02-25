@@ -33,6 +33,8 @@ export const CacheKeys = {
   /** Single cache for all soccer odds (one API call for sport_key "soccer"). */
   oddsAllSoccer: "odds:all-soccer",
   oddsEvent: (sportKey: string) => `odds:${sportKey}`,
+  /** League bulk odds (h2h, totals, spreads). Use this to avoid reusing stale/empty cache from different request shape. */
+  oddsLeagueBulk: (sportKey: string) => `odds:${sportKey}:bulk`,
   btts: (sportKey: string, eventId: string) => `btts:${sportKey}:${eventId}`,
   match: (id: number) => `match:${id}`,
   teamMatches: (teamId: number) => `team-matches:${teamId}`,

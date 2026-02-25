@@ -24,6 +24,8 @@ export interface StoredUsage {
   oddsApiRemaining: number | null;
   oddsApiUsed: number | null;
   updatedAt: string;
+  /** True when the Odds API returned quota exceeded (401) so no odds could be loaded */
+  quotaExceeded?: boolean;
 }
 
 export interface StoredMatchesPayload {

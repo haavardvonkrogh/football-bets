@@ -105,6 +105,7 @@ export default function DashboardPage() {
         oddsApiRemaining: data.usage?.oddsApiRemaining ?? prevUsage?.oddsApiRemaining ?? null,
         oddsApiUsed: data.usage?.oddsApiUsed ?? prevUsage?.oddsApiUsed ?? null,
         updatedAt: new Date().toISOString(),
+        quotaExceeded: data.usage?.quotaExceeded ?? prevUsage?.quotaExceeded ?? false,
       };
       setStoredMatchesPayload({
         matches: data.matches ?? [],
@@ -1406,19 +1407,33 @@ function APIUsage({ usage }: { usage: StoredUsage | null }) {
   if (!usage) return null;
   const remaining = usage.oddsApiRemaining;
   const used = usage.oddsApiUsed;
+  const quotaExceeded = usage.quotaExceeded;
+  const outOfQuota = quotaExceeded || (remaining != null && remaining <= 0);
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-[var(--glass)] px-3 py-2 text-sm backdrop-blur-sm">
       <span className="text-[var(--muted)]">Odds API: </span>
-      {remaining != null && (
-        <span className="text-white font-semibold">{remaining} kall igjen</span>
-      )}
-      {used != null && (
-        <span className="ml-2 text-[var(--muted)]">
-          ({used} brukt denne måneden)
-        </span>
-      )}
-      {remaining == null && used == null && (
-        <span className="text-[var(--muted)]">Bruk lastet fra cache</span>
+      {outOfQuota ? (
+        <>
+          <span className="font-semibold text-amber-400">Kvote brukt – ingen odds tilgjengelig.</span>
+          {used != null && (
+            <span className="ml-2 text-[var(--muted)]">({used} brukt denne måneden)</span>
+          )}
+          <span className="ml-2 text-[var(--muted)]">Kvoten tilbakestilles månedlig på the-odds-api.com.</span>
+        </>
+      ) : (
+        <>
+          {remaining != null && (
+            <span className="text-white font-semibold">{remaining} kall igjen</span>
+          )}
+          {used != null && (
+            <span className="ml-2 text-[var(--muted)]">
+              ({used} brukt denne måneden)
+            </span>
+          )}
+          {remaining == null && used == null && (
+            <span className="text-[var(--muted)]">Bruk lastet fra cache</span>
+          )}
+        </>
       )}
     </div>
   );
