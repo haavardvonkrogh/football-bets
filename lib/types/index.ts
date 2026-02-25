@@ -183,6 +183,8 @@ export interface BetResult {
   won: boolean;
   returns: number;
   settledAt: string;
+  /** Optional display of actual score when auto-settled (e.g. "2-1") */
+  scoreDisplay?: string;
 }
 
 export interface WeekSummary {

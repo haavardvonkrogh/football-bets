@@ -5,6 +5,7 @@
 
 import type { UpcomingMatch } from "@/lib/types";
 import type { UserSettings, PlacedBet, BetResult, WeekSummary, WeeklyBettingPlan, PlannedBet } from "@/lib/types";
+import type { MatchResult } from "@/lib/utils/bet-outcome";
 
 const PREFIX = "football-bets";
 
@@ -15,6 +16,7 @@ export const StorageKeys = {
   settings: `${PREFIX}:settings`,
   bets: `${PREFIX}:bets`,
   results: `${PREFIX}:results`,
+  matchResult: (matchId: number) => `${PREFIX}:match-result:${matchId}`,
 } as const;
 
 export interface StoredUsage {
@@ -98,6 +100,15 @@ export function getStoredResults(): BetResult[] {
 
 export function setStoredResults(results: BetResult[]): void {
   safeSet(StorageKeys.results, results);
+}
+
+/** Cache finished match result (client). Once FINISHED we never refetch. */
+export function getCachedMatchResult(matchId: number): MatchResult | null {
+  return safeJsonParse(StorageKeys.matchResult(matchId), null as MatchResult | null);
+}
+
+export function setCachedMatchResult(matchId: number, result: MatchResult): void {
+  safeSet(StorageKeys.matchResult(matchId), result);
 }
 
 /** Get ISO week key for a date (e.g. "2025-W08") */

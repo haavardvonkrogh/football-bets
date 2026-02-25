@@ -29,8 +29,11 @@ import {
   getCurrentWeekKey,
   confirmWeeklyPlan,
   removeWeekFromResults,
+  getCachedMatchResult,
+  setCachedMatchResult,
   type StoredUsage,
 } from "@/lib/utils/storage";
+import { computeBetOutcome } from "@/lib/utils/bet-outcome";
 import { getRecommendations } from "@/lib/utils/recommendations";
 import { getWeeklyBettingPlan } from "@/lib/utils/betting-plan";
 import { getPlanSummary } from "@/lib/utils/plan-summary";
